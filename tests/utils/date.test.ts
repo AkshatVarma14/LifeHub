@@ -7,6 +7,10 @@ import {
   isValidMonthString,
   extractMonthFromDate,
   getCurrentMonthString,
+  getPreviousMonthString,
+  getNextMonthString,
+  formatMonthDisplay,
+  formatDateDisplay,
 } from '../../src/utils/date.ts';
 
 test('Date Utilities: isLeapYear rules', () => {
@@ -95,3 +99,30 @@ test('Date Utilities: getCurrentMonthString format and custom date', () => {
   // Default calls with new Date() must match YYYY-MM regex
   assert.match(getCurrentMonthString(), /^\d{4}-\d{2}$/);
 });
+
+test('Date Utilities: getPreviousMonthString and getNextMonthString stepping and boundaries', () => {
+  // Regular month transition
+  assert.strictEqual(getPreviousMonthString('2026-10'), '2026-09');
+  assert.strictEqual(getNextMonthString('2026-10'), '2026-11');
+
+  // Year boundary transitions
+  assert.strictEqual(getPreviousMonthString('2026-01'), '2025-12');
+  assert.strictEqual(getNextMonthString('2026-12'), '2027-01');
+
+  // Input validation
+  assert.throws(() => getPreviousMonthString('invalid-month'), /Invalid month string/i);
+  assert.throws(() => getNextMonthString('invalid-month'), /Invalid month string/i);
+});
+
+test('Date Utilities: formatMonthDisplay and formatDateDisplay readable formats', () => {
+  assert.strictEqual(formatMonthDisplay('2026-10'), 'October 2026');
+  assert.strictEqual(formatMonthDisplay('2025-01'), 'January 2025');
+  assert.strictEqual(formatMonthDisplay('2026-12'), 'December 2026');
+  assert.throws(() => formatMonthDisplay('2026-13'), /Invalid month string/i);
+
+  assert.strictEqual(formatDateDisplay('2026-10-12'), '12 Oct 2026');
+  assert.strictEqual(formatDateDisplay('2024-02-29'), '29 Feb 2024');
+  assert.strictEqual(formatDateDisplay('2025-01-01'), '1 Jan 2025');
+  assert.throws(() => formatDateDisplay('2026-02-30'), /Invalid date string/i);
+});
+

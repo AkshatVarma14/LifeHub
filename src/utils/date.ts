@@ -108,3 +108,105 @@ export function getCurrentMonthString(date: Date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
 }
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+const MONTH_NAMES_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/**
+ * Returns the YYYY-MM string of the preceding calendar month.
+ * Handles year boundary transitions (e.g. 2026-01 -> 2025-12).
+ */
+export function getPreviousMonthString(monthStr: string): string {
+  if (!isValidMonthString(monthStr)) {
+    throw new Error(`Invalid month string '${monthStr}'. Expected YYYY-MM.`);
+  }
+  const [yearStr, monthNumStr] = monthStr.split('-');
+  let year = parseInt(yearStr, 10);
+  let month = parseInt(monthNumStr, 10);
+
+  if (month === 1) {
+    year -= 1;
+    month = 12;
+  } else {
+    month -= 1;
+  }
+
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/**
+ * Returns the YYYY-MM string of the subsequent calendar month.
+ * Handles year boundary transitions (e.g. 2026-12 -> 2027-01).
+ */
+export function getNextMonthString(monthStr: string): string {
+  if (!isValidMonthString(monthStr)) {
+    throw new Error(`Invalid month string '${monthStr}'. Expected YYYY-MM.`);
+  }
+  const [yearStr, monthNumStr] = monthStr.split('-');
+  let year = parseInt(yearStr, 10);
+  let month = parseInt(monthNumStr, 10);
+
+  if (month === 12) {
+    year += 1;
+    month = 1;
+  } else {
+    month += 1;
+  }
+
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+/**
+ * Formats a YYYY-MM month string for human display (e.g. '2026-10' -> 'October 2026').
+ */
+export function formatMonthDisplay(monthStr: string): string {
+  if (!isValidMonthString(monthStr)) {
+    throw new Error(`Invalid month string '${monthStr}'. Expected YYYY-MM.`);
+  }
+  const [yearStr, monthNumStr] = monthStr.split('-');
+  const monthIndex = parseInt(monthNumStr, 10) - 1;
+  const monthName = MONTH_NAMES[monthIndex] ?? '';
+  return `${monthName} ${yearStr}`;
+}
+
+/**
+ * Formats a YYYY-MM-DD date string for readable display (e.g. '2026-10-12' -> '12 Oct 2026').
+ */
+export function formatDateDisplay(dateStr: string): string {
+  if (!isValidDateString(dateStr)) {
+    throw new Error(`Invalid date string '${dateStr}'. Expected YYYY-MM-DD.`);
+  }
+  const [yearStr, monthNumStr, dayStr] = dateStr.split('-');
+  const monthIndex = parseInt(monthNumStr, 10) - 1;
+  const monthShort = MONTH_NAMES_SHORT[monthIndex] ?? '';
+  const day = parseInt(dayStr, 10);
+  return `${day} ${monthShort} ${yearStr}`;
+}
+

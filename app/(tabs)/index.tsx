@@ -1,68 +1,151 @@
-import { StyleSheet } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  Pressable,
+} from 'react-native';
+import { useFinance } from '@/src/features/finance/context';
+import {
+  MonthSelector,
+  MonthlySummaryCard,
+  TransactionList,
+} from '@/src/features/finance/components';
 
-import { Text, View } from '@/components/Themed';
+export default function FinanceScreen() {
+  const {
+    selectedMonth,
+    setSelectedMonth,
+    summary,
+    transactions,
+    commitments,
+    isLoading,
+    error,
+    refresh,
+  } = useFinance();
 
-export default function HomeScreen() {
+  const handleRefresh = useCallback(() => {
+    refresh();
+  }, [refresh]);
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>LifeHub</Text>
-      <Text style={styles.subtitle}>Personal Life Management</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <View style={styles.card} lightColor="#f9f9f9" darkColor="#1a1a1a">
-        <Text style={styles.cardHeader}>Stage 0: Application Scaffold</Text>
-        <Text style={styles.cardBody}>
-          Welcome to LifeHub! The mobile foundation is running with Expo Router and TypeScript.
-        </Text>
-        <Text style={styles.cardNote}>
-          Core offline modules (Finance, Calendar, Habits) will be enabled in subsequent milestones.
-        </Text>
-      </View>
-    </View>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.contentContainer}
+      refreshControl={
+        <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
+      }
+    >
+      {/* 1. Month Navigation Stepper */}
+      <MonthSelector
+        selectedMonth={selectedMonth}
+        onSelectMonth={setSelectedMonth}
+        isLoading={isLoading}
+      />
+
+      {/* 2. Error Banner */}
+      {error && (
+        <View style={styles.errorBanner} accessibilityRole="alert">
+          <View style={styles.errorTextContainer}>
+            <Text style={styles.errorTitle}>Error loading finance data</Text>
+            <Text style={styles.errorMessage}>{error.message}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading data"
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={handleRefresh}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* 3. Initial Loading Indicator if no cached data */}
+      {isLoading && transactions.length === 0 && !error && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#2563eb" />
+          <Text style={styles.loadingText}>Updating month data...</Text>
+        </View>
+      )}
+
+      {/* 4. Monthly Finance Summary Card */}
+      <MonthlySummaryCard summary={summary} />
+
+      {/* 5. Transactions Feed for Selected Month */}
+      <TransactionList
+        transactions={transactions}
+        commitments={commitments}
+        selectedMonth={selectedMonth}
+        isLoading={isLoading}
+      />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  contentContainer: {
+    paddingBottom: 32,
+  },
+  errorBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  errorTextContainer: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  errorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#991b1b',
+  },
+  errorMessage: {
+    fontSize: 12,
+    color: '#b91c1c',
+    marginTop: 2,
+  },
+  retryButton: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingVertical: 8,
+    gap: 8,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  separator: {
-    marginVertical: 24,
-    height: 1,
-    width: '80%',
-  },
-  card: {
-    padding: 20,
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  cardHeader: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  cardBody: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 10,
-  },
-  cardNote: {
+  loadingText: {
     fontSize: 12,
-    opacity: 0.6,
-    textAlign: 'center',
+    color: '#6b7280',
   },
 });

@@ -3,7 +3,10 @@ node_modules/
 .expo/
 dist/
 build/
+web-build/
 coverage/
+expo-env.d.ts
+*.tsbuildinfo
 
 # Local environment and secrets
 .env
@@ -30,3 +33,9 @@ Thumbs.db
 # OS temporary files
 *.tmp
 *.swp
+
+# Generated native folders
+/ios
+/android
+.kotlin/
+*.jks

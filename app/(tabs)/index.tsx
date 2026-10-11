@@ -13,6 +13,7 @@ import { useFinance } from '@/src/features/finance/context';
 import {
   MonthSelector,
   MonthlySummaryCard,
+  CategorySpendingCard,
   TransactionList,
   TransactionFormModal,
   BudgetModal,
@@ -111,7 +112,12 @@ export default function FinanceScreen() {
         onConfigureBudget={handleOpenBudgetModal}
       />
 
-      {/* 5. Transactions Feed for Selected Month */}
+      {/* 5. Category Spending Breakdown */}
+      <CategorySpendingCard
+        categoryBreakdown={summary.categoryBreakdown}
+      />
+
+      {/* 6. Transactions Feed for Selected Month */}
       <TransactionList
         transactions={transactions}
         commitments={commitments}

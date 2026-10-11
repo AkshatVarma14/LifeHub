@@ -3,15 +3,17 @@ import {
   StyleSheet,
   View,
   Text,
+  Pressable,
 } from 'react-native';
 import type { BudgetSummary } from '../../../types/finance.ts';
 import { formatPaiseToINR } from '../../../utils/currency.ts';
 
 export interface MonthlySummaryCardProps {
   summary: BudgetSummary;
+  onConfigureBudget?: () => void;
 }
 
-export function MonthlySummaryCard({ summary }: MonthlySummaryCardProps) {
+export function MonthlySummaryCard({ summary, onConfigureBudget }: MonthlySummaryCardProps) {
   const hasBudget = summary.hasConfiguredBudget;
   const isOverBudget =
     summary.remainingUsableBudgetPaise !== null && summary.remainingUsableBudgetPaise < 0;
@@ -45,21 +47,38 @@ export function MonthlySummaryCard({ summary }: MonthlySummaryCardProps) {
     <View style={styles.card}>
       {/* 1. Header: Primary Budget Status */}
       <View style={styles.headerRow}>
-        <View>
+        <View style={styles.headerTitleGroup}>
           <Text style={styles.headerLabel}>Planned Budget</Text>
           <Text style={[styles.headerAmount, !hasBudget && styles.unconfiguredText]}>
             {plannedBudgetDisplay}
           </Text>
         </View>
-        <View style={styles.badgeContainer}>
-          {hasBudget ? (
-            <View style={styles.configuredBadge}>
-              <Text style={styles.configuredBadgeText}>Budget Active</Text>
-            </View>
-          ) : (
-            <View style={styles.unconfiguredBadge}>
-              <Text style={styles.unconfiguredBadgeText}>No Budget Set</Text>
-            </View>
+        <View style={styles.headerActions}>
+          <View style={styles.badgeContainer}>
+            {hasBudget ? (
+              <View style={styles.configuredBadge}>
+                <Text style={styles.configuredBadgeText}>Budget Active</Text>
+              </View>
+            ) : (
+              <View style={styles.unconfiguredBadge}>
+                <Text style={styles.unconfiguredBadgeText}>No Budget Set</Text>
+              </View>
+            )}
+          </View>
+          {onConfigureBudget && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={hasBudget ? 'Edit Monthly Budget' : 'Set Monthly Budget'}
+              onPress={onConfigureBudget}
+              style={({ pressed }) => [
+                styles.configureBudgetButton,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.configureBudgetButtonText}>
+                {hasBudget ? 'Edit Budget' : 'Set Budget'}
+              </Text>
+            </Pressable>
           )}
         </View>
       </View>
@@ -165,6 +184,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
+  headerTitleGroup: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  headerActions: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   headerLabel: {
     fontSize: 13,
     color: '#6b7280',
@@ -182,7 +209,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   badgeContainer: {
-    marginTop: 4,
+    marginTop: 2,
   },
   configuredBadge: {
     backgroundColor: '#dcfce7',
@@ -205,6 +232,22 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 11,
     fontWeight: '600',
+  },
+  configureBudgetButton: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  configureBudgetButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563eb',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
   metricsGrid: {
     flexDirection: 'row',

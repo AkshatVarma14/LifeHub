@@ -15,6 +15,7 @@ import {
   MonthlySummaryCard,
   TransactionList,
   TransactionFormModal,
+  BudgetModal,
 } from '@/src/features/finance/components';
 
 export default function FinanceScreen() {
@@ -30,6 +31,7 @@ export default function FinanceScreen() {
   } = useFinance();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const handleRefresh = useCallback(() => {
@@ -49,6 +51,14 @@ export default function FinanceScreen() {
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setEditingTransaction(null);
+  }, []);
+
+  const handleOpenBudgetModal = useCallback(() => {
+    setIsBudgetModalOpen(true);
+  }, []);
+
+  const handleCloseBudgetModal = useCallback(() => {
+    setIsBudgetModalOpen(false);
   }, []);
 
   return (
@@ -96,7 +106,10 @@ export default function FinanceScreen() {
       )}
 
       {/* 4. Monthly Finance Summary Card */}
-      <MonthlySummaryCard summary={summary} />
+      <MonthlySummaryCard
+        summary={summary}
+        onConfigureBudget={handleOpenBudgetModal}
+      />
 
       {/* 5. Transactions Feed for Selected Month */}
       <TransactionList
@@ -113,6 +126,13 @@ export default function FinanceScreen() {
         visible={isModalOpen}
         onClose={handleCloseModal}
         editingTransaction={editingTransaction}
+        selectedMonth={selectedMonth}
+      />
+
+      {/* 7. Budget Configuration Modal */}
+      <BudgetModal
+        visible={isBudgetModalOpen}
+        onClose={handleCloseBudgetModal}
         selectedMonth={selectedMonth}
       />
     </ScrollView>

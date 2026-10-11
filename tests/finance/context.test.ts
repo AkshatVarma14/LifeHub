@@ -452,3 +452,121 @@ test('Finance Store: Deleting linked transaction updates actual spending and com
   assert.strictEqual(summary.activeCommitmentsReservedPaise, 200000);
 });
 
+test('Finance Store: Setting, updating, clearing, and reloading monthly budget preserves ADR-02 calculations', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  // 1. Initial unconfigured state
+  assert.strictEqual(store.getState().monthlyBudget, null);
+  assert.strictEqual(store.getState().summary.hasConfiguredBudget, false);
+  assert.strictEqual(store.getState().summary.totalPlannedBudgetPaise, null);
+  assert.strictEqual(store.getState().summary.actualUsableBudgetPaise, null);
+  assert.strictEqual(store.getState().summary.remainingUsableBudgetPaise, null);
+
+  // Add an active commitment (₹10,000) and an unlinked expense (₹3,000)
+  await store.addCommitment({
+    name: 'Broadband',
+    category: 'Utilities & Bills',
+    expectedAmountPaise: 1000000,
+    dueDay: 15,
+    active: true,
+  });
+
+  await store.addTransaction({
+    amountPaise: 300000,
+    type: 'expense',
+    category: 'Food & Dining',
+    date: '2026-10-05',
+    description: 'Groceries',
+  });
+
+  // 2. Configure budget to ₹40,000
+  await store.setBudget({
+    month: '2026-10',
+    totalBudgetPaise: 4000000,
+  });
+
+  let state = store.getState();
+  assert.ok(state.monthlyBudget !== null);
+  assert.strictEqual(state.summary.hasConfiguredBudget, true);
+  assert.strictEqual(state.summary.totalPlannedBudgetPaise, 4000000);
+  assert.strictEqual(state.summary.actualUsableBudgetPaise, 3000000); // 40k - 10k
+  assert.strictEqual(state.summary.remainingUsableBudgetPaise, 2700000); // 30k - 3k
+
+  // 3. Update budget to configured zero (₹0.00)
+  await store.setBudget({
+    month: '2026-10',
+    totalBudgetPaise: 0,
+  });
+
+  state = store.getState();
+  assert.ok(state.monthlyBudget !== null);
+  assert.strictEqual(state.summary.hasConfiguredBudget, true);
+  assert.strictEqual(state.summary.totalPlannedBudgetPaise, 0);
+  assert.strictEqual(state.summary.actualUsableBudgetPaise, -1000000); // 0 - 10k
+  assert.strictEqual(state.summary.remainingUsableBudgetPaise, -1300000); // -10k - 3k
+
+  // 4. Persistence check: instantiate a fresh store on same DB
+  const reloadedStore = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await reloadedStore.loadMonthData('2026-10');
+  const reloadedState = reloadedStore.getState();
+  assert.ok(reloadedState.monthlyBudget !== null);
+  assert.strictEqual(reloadedState.summary.hasConfiguredBudget, true);
+  assert.strictEqual(reloadedState.summary.totalPlannedBudgetPaise, 0);
+  assert.strictEqual(reloadedState.summary.actualUsableBudgetPaise, -1000000);
+
+  // 5. Clear budget (delete) -> returns to unconfigured
+  await store.deleteBudget('2026-10');
+
+  state = store.getState();
+  assert.strictEqual(state.monthlyBudget, null);
+  assert.strictEqual(state.summary.hasConfiguredBudget, false);
+  assert.strictEqual(state.summary.totalPlannedBudgetPaise, null);
+  assert.strictEqual(state.summary.actualUsableBudgetPaise, null);
+  assert.strictEqual(state.summary.remainingUsableBudgetPaise, null);
+
+  // 6. Persistence check after deletion
+  await reloadedStore.loadMonthData('2026-10');
+  assert.strictEqual(reloadedStore.getState().monthlyBudget, null);
+  assert.strictEqual(reloadedStore.getState().summary.hasConfiguredBudget, false);
+});
+
+test('Finance Store: Budget mutation failure leaves state intact and resets mutation flag', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  // Deleting unconfigured budget must reject and reset isMutating
+  await assert.rejects(
+    async () => {
+      await store.deleteBudget('2026-10');
+    },
+    /could not be deleted or was not found/i
+  );
+
+  assert.strictEqual(store.getState().isMutating, false);
+  assert.ok(store.getState().error !== null);
+
+  // Setting invalid budget input must reject and reset isMutating
+  await assert.rejects(
+    async () => {
+      await store.setBudget({
+        month: 'invalid-month',
+        totalBudgetPaise: -500,
+      });
+    },
+    /validation failed/i
+  );
+
+  assert.strictEqual(store.getState().isMutating, false);
+});
+

@@ -184,6 +184,32 @@ test('Transaction Repository: Foreign key enforcement and ON DELETE SET NULL beh
     'ON DELETE SET NULL must set foreign key to null'
   );
   assert.strictEqual(txAfterFpDelete.amountPaise, 1500000, 'Transaction must not be deleted');
+
+  // 5. Inverse check: deleting a linked transaction must NOT delete its parent commitment
+  const wifiCommitment = await fpRepo.create({
+    name: 'Home Fiber WiFi',
+    category: 'Utilities & Bills',
+    expectedAmountPaise: 120000,
+    dueDay: 10,
+    active: true,
+  });
+
+  const wifiTx = await txRepo.create({
+    amountPaise: 120000,
+    type: 'expense',
+    category: 'Utilities & Bills',
+    date: '2026-10-10',
+    description: 'WiFi Payment',
+    linkedFixedPaymentId: wifiCommitment.id,
+  });
+
+  const txDeleted = await txRepo.delete(wifiTx.id);
+  assert.strictEqual(txDeleted, true);
+  assert.strictEqual(await txRepo.getById(wifiTx.id), null);
+
+  const parentStillExists = await fpRepo.getById(wifiCommitment.id);
+  assert.ok(parentStillExists !== null, 'Parent commitment must remain intact when linked child transaction is deleted');
+  assert.strictEqual(parentStillExists.name, 'Home Fiber WiFi');
 });
 
 test('Monthly Budget Repository: CRUD, zero budget preservation, and upsert idempotency', async () => {

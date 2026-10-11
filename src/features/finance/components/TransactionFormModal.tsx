@@ -42,13 +42,17 @@ export function TransactionFormModal({
   editingTransaction = null,
   selectedMonth,
 }: TransactionFormModalProps) {
-  const { addTransaction, updateTransaction } = useFinance();
+  const { addTransaction, updateTransaction, deleteTransaction } = useFinance();
 
   const [formData, setFormData] = useState<TransactionFormData>(() =>
     getInitialTransactionFormData(editingTransaction, selectedMonth)
   );
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  const isBusy = isSubmitting || isDeleting;
 
   // Re-initialize form data whenever modal opens or editing target changes
   useEffect(() => {
@@ -56,6 +60,8 @@ export function TransactionFormModal({
       setFormData(getInitialTransactionFormData(editingTransaction, selectedMonth));
       setFormError(null);
       setIsSubmitting(false);
+      setIsConfirmingDelete(false);
+      setIsDeleting(false);
     }
   }, [visible, editingTransaction, selectedMonth]);
 
@@ -83,7 +89,7 @@ export function TransactionFormModal({
   };
 
   const handleSave = async () => {
-    if (isSubmitting) return;
+    if (isBusy) return;
 
     // Validate inputs using pure form validator
     const validation = validateAndMapTransactionForm(formData);
@@ -111,6 +117,25 @@ export function TransactionFormModal({
     }
   };
 
+  const handleDelete = async () => {
+    if (isBusy || !editingTransaction) return;
+
+    setIsDeleting(true);
+    setFormError(null);
+
+    try {
+      await deleteTransaction(editingTransaction.id);
+      onClose();
+    } catch (err) {
+      // Keep modal open, preserve form data, and surface accessible error
+      const message = err instanceof Error ? err.message : String(err);
+      setFormError(`Delete failed: ${message}`);
+      setIsConfirmingDelete(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const isEditing = editingTransaction !== null;
   const categoriesToDisplay =
     formData.type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
@@ -135,7 +160,7 @@ export function TransactionFormModal({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close form"
-              disabled={isSubmitting}
+              disabled={isBusy}
               onPress={onClose}
               style={({ pressed }) => [
                 styles.closeButton,
@@ -164,7 +189,7 @@ export function TransactionFormModal({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Expense type"
-                disabled={isSubmitting}
+                disabled={isBusy}
                 style={[
                   styles.typeButton,
                   formData.type === 'expense' && styles.expenseActiveButton,
@@ -184,7 +209,7 @@ export function TransactionFormModal({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Income type"
-                disabled={isSubmitting}
+                disabled={isBusy}
                 style={[
                   styles.typeButton,
                   formData.type === 'income' && styles.incomeActiveButton,
@@ -212,7 +237,7 @@ export function TransactionFormModal({
                 placeholder="0.00"
                 placeholderTextColor="#9ca3af"
                 keyboardType="decimal-pad"
-                editable={!isSubmitting}
+                editable={!isBusy}
                 value={formData.amount}
                 onChangeText={(text) => {
                   setFormData((prev) => ({ ...prev, amount: text }));
@@ -231,7 +256,7 @@ export function TransactionFormModal({
                     key={cat}
                     accessibilityRole="button"
                     accessibilityLabel={`Category ${cat}`}
-                    disabled={isSubmitting}
+                    disabled={isBusy}
                     style={[
                       styles.categoryChip,
                       isSelected &&
@@ -260,7 +285,7 @@ export function TransactionFormModal({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Set date to today"
-                disabled={isSubmitting}
+                disabled={isBusy}
                 onPress={handleSetToday}
                 style={({ pressed }) => [
                   styles.todayChip,
@@ -275,7 +300,7 @@ export function TransactionFormModal({
               style={styles.textInput}
               placeholder="YYYY-MM-DD"
               placeholderTextColor="#9ca3af"
-              editable={!isSubmitting}
+              editable={!isBusy}
               value={formData.date}
               onChangeText={(text) => {
                 setFormData((prev) => ({ ...prev, date: text }));
@@ -291,13 +316,79 @@ export function TransactionFormModal({
               placeholder={`e.g. Lunch (defaults to '${formData.category}')`}
               placeholderTextColor="#9ca3af"
               maxLength={255}
-              editable={!isSubmitting}
+              editable={!isBusy}
               value={formData.description}
               onChangeText={(text) => {
                 setFormData((prev) => ({ ...prev, description: text }));
                 setFormError(null);
               }}
             />
+
+            {/* 6. Destructive Delete Section (Only when editing) */}
+            {isEditing && (
+              <View style={styles.deleteSection}>
+                {!isConfirmingDelete ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete Transaction"
+                    disabled={isBusy}
+                    onPress={() => {
+                      setIsConfirmingDelete(true);
+                      setFormError(null);
+                    }}
+                    style={({ pressed }) => [
+                      styles.deleteButton,
+                      pressed && styles.buttonPressed,
+                      isBusy && styles.buttonDisabled,
+                    ]}
+                  >
+                    <Text style={styles.deleteButtonText}>Delete Transaction</Text>
+                  </Pressable>
+                ) : (
+                  <View
+                    style={styles.deleteConfirmContainer}
+                    accessibilityRole="alert"
+                    accessibilityLiveRegion="polite"
+                  >
+                    <Text style={styles.deleteConfirmWarning}>
+                      Delete this transaction? This action cannot be undone.
+                    </Text>
+                    <View style={styles.deleteConfirmRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Keep Transaction"
+                        disabled={isBusy}
+                        onPress={() => setIsConfirmingDelete(false)}
+                        style={({ pressed }) => [
+                          styles.keepButton,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={styles.keepButtonText}>Keep Transaction</Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Confirm Delete"
+                        disabled={isBusy}
+                        onPress={handleDelete}
+                        style={({ pressed }) => [
+                          styles.confirmDeleteButton,
+                          pressed && styles.buttonPressed,
+                          isDeleting && styles.buttonDisabled,
+                        ]}
+                      >
+                        {isDeleting ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <Text style={styles.confirmDeleteButtonText}>Confirm Delete</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           {/* Action Buttons */}
@@ -305,11 +396,12 @@ export function TransactionFormModal({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              disabled={isSubmitting}
+              disabled={isBusy}
               onPress={onClose}
               style={({ pressed }) => [
                 styles.cancelButton,
                 pressed && styles.buttonPressed,
+                isBusy && styles.buttonDisabled,
               ]}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -318,12 +410,12 @@ export function TransactionFormModal({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={isEditing ? 'Save Changes' : 'Save Transaction'}
-              disabled={isSubmitting}
+              disabled={isBusy || isConfirmingDelete}
               onPress={handleSave}
               style={({ pressed }) => [
                 styles.saveButton,
                 pressed && styles.buttonPressed,
-                isSubmitting && styles.buttonDisabled,
+                (isBusy || isConfirmingDelete) && styles.buttonDisabled,
               ]}
             >
               {isSubmitting ? (
@@ -550,5 +642,71 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  deleteSection: {
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  deleteButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteConfirmContainer: {
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  deleteConfirmWarning: {
+    fontSize: 13,
+    color: '#991b1b',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  deleteConfirmRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  keepButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keepButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  confirmDeleteButton: {
+    flex: 1,
+    height: 42,
+    borderRadius: 8,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDeleteButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });

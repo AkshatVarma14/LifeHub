@@ -335,3 +335,120 @@ test('Finance Store: Full CRUD mutations update state and enforce ADR-02 calcula
   assert.strictEqual(store.getState().monthlyBudget, null);
   assert.strictEqual(store.getState().summary.hasConfiguredBudget, false);
 });
+
+test('Finance Store: Deleting nonexistent transaction ID rejects and resets mutation state', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  await assert.rejects(
+    async () => {
+      await store.deleteTransaction('non-existent-tx-id');
+    },
+    /could not be deleted or was not found/i
+  );
+
+  const state = store.getState();
+  assert.strictEqual(state.isMutating, false);
+  assert.ok(state.error !== null);
+  assert.match(state.error.message, /not found/i);
+});
+
+test('Finance Store: Post-deletion refresh failure does not report write as failed', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  const tx = await store.addTransaction({
+    amountPaise: 40000,
+    type: 'expense',
+    category: 'Personal & Leisure',
+    date: '2026-10-10',
+    description: 'Movie Ticket',
+  });
+
+  assert.strictEqual(store.getState().transactions.length, 1);
+
+  // Force listByMonth to fail on subsequent calls (during post-delete refresh)
+  let deleteCalled = false;
+  const originalList = txRepo.listByMonth.bind(txRepo);
+  txRepo.listByMonth = async (m: string) => {
+    if (deleteCalled) {
+      throw new Error('Simulated refresh failure after delete');
+    }
+    return originalList(m);
+  };
+
+  deleteCalled = true;
+
+  // deleteTransaction should not throw even if subsequent refresh fails
+  await store.deleteTransaction(tx.id);
+
+  // Verify row was deleted in SQLite
+  const inDb = await originalList('2026-10');
+  assert.strictEqual(inDb.length, 0);
+
+  // Store mutation flag is reset
+  assert.strictEqual(store.getState().isMutating, false);
+});
+
+test('Finance Store: Deleting linked transaction updates actual spending and commitment fulfillment', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  await store.setBudget({
+    month: '2026-10',
+    totalBudgetPaise: 4000000, // ₹40,000
+  });
+
+  const gym = await store.addCommitment({
+    name: 'Gym Membership',
+    category: 'Healthcare',
+    expectedAmountPaise: 200000, // ₹2,000
+    dueDay: 10,
+    active: true,
+  });
+
+  const gymTx = await store.addTransaction({
+    amountPaise: 200000,
+    type: 'expense',
+    category: 'Healthcare',
+    date: '2026-10-10',
+    description: 'October Gym',
+    linkedFixedPaymentId: gym.id,
+  });
+
+  let summary = store.getState().summary;
+  assert.strictEqual(summary.totalActualSpendingPaise, 200000);
+  assert.strictEqual(summary.commitmentsBreakdown[0].actualPaidPaise, 200000);
+  assert.strictEqual(summary.commitmentsBreakdown[0].isFulfilled, true);
+
+  // Delete the linked payment transaction
+  await store.deleteTransaction(gymTx.id);
+
+  summary = store.getState().summary;
+  assert.strictEqual(summary.totalActualSpendingPaise, 0);
+  assert.strictEqual(summary.commitmentsBreakdown[0].actualPaidPaise, 0);
+  assert.strictEqual(summary.commitmentsBreakdown[0].isFulfilled, false);
+  assert.strictEqual(store.getState().transactions.length, 0);
+
+  // Verify parent commitment in fixed_payments is still active and intact
+  const parentGym = await fpRepo.getById(gym.id);
+  assert.ok(parentGym !== null);
+  assert.strictEqual(parentGym.name, 'Gym Membership');
+  assert.strictEqual(summary.activeCommitmentsReservedPaise, 200000);
+});
+

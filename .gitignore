@@ -1,0 +1,32 @@
+# Dependencies and generated build output
+node_modules/
+.expo/
+dist/
+build/
+coverage/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.mobileprovision
+
+# Platform/editor output
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Local databases and user data
+*.sqlite
+*.sqlite3
+*.db
+*.realm
+
+# OS temporary files
+*.tmp
+*.swp

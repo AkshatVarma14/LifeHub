@@ -99,3 +99,12 @@ export function extractMonthFromDate(dateStr: string): string {
   }
   return dateStr.slice(0, 7);
 }
+
+/**
+ * Returns the year and month as a YYYY-MM string for a given date (defaults to current local date).
+ */
+export function getCurrentMonthString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}

@@ -6,6 +6,7 @@ import {
   isValidDateString,
   isValidMonthString,
   extractMonthFromDate,
+  getCurrentMonthString,
 } from '../../src/utils/date.ts';
 
 test('Date Utilities: isLeapYear rules', () => {
@@ -82,4 +83,15 @@ test('Date Utilities: extractMonthFromDate extraction', () => {
   assert.strictEqual(extractMonthFromDate('2026-10-12'), '2026-10');
   assert.strictEqual(extractMonthFromDate('2024-02-29'), '2024-02');
   assert.throws(() => extractMonthFromDate('invalid-date'), /Cannot extract month/i);
+});
+
+test('Date Utilities: getCurrentMonthString format and custom date', () => {
+  const customDate = new Date(2026, 9, 12); // October 2026 (month index 9)
+  assert.strictEqual(getCurrentMonthString(customDate), '2026-10');
+
+  const janDate = new Date(2025, 0, 1); // January 2025
+  assert.strictEqual(getCurrentMonthString(janDate), '2025-01');
+
+  // Default calls with new Date() must match YYYY-MM regex
+  assert.match(getCurrentMonthString(), /^\d{4}-\d{2}$/);
 });

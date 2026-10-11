@@ -7,6 +7,7 @@ import {
   isValidMonthString,
   extractMonthFromDate,
   getCurrentMonthString,
+  getTodayDateString,
   getPreviousMonthString,
   getNextMonthString,
   formatMonthDisplay,
@@ -99,6 +100,19 @@ test('Date Utilities: getCurrentMonthString format and custom date', () => {
   // Default calls with new Date() must match YYYY-MM regex
   assert.match(getCurrentMonthString(), /^\d{4}-\d{2}$/);
 });
+
+test('Date Utilities: getTodayDateString format and custom date', () => {
+  const customDate = new Date(2026, 9, 12); // October 12, 2026
+  assert.strictEqual(getTodayDateString(customDate), '2026-10-12');
+
+  const janDate = new Date(2025, 0, 5); // January 5, 2025
+  assert.strictEqual(getTodayDateString(janDate), '2025-01-05');
+
+  // Default calls with new Date() must match valid ISO date regex
+  assert.match(getTodayDateString(), /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(isValidDateString(getTodayDateString()));
+});
+
 
 test('Date Utilities: getPreviousMonthString and getNextMonthString stepping and boundaries', () => {
   // Regular month transition

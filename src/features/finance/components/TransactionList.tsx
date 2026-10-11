@@ -3,6 +3,7 @@ import {
   StyleSheet,
   View,
   Text,
+  Pressable,
 } from 'react-native';
 import type { Transaction, FixedPayment } from '../../../types/finance.ts';
 import { formatMonthDisplay } from '../../../utils/date.ts';
@@ -13,6 +14,8 @@ export interface TransactionListProps {
   commitments?: FixedPayment[];
   selectedMonth: string;
   isLoading?: boolean;
+  onEditTransaction?: (tx: Transaction) => void;
+  onAddTransaction?: () => void;
 }
 
 export function TransactionList({
@@ -20,6 +23,8 @@ export function TransactionList({
   commitments = [],
   selectedMonth,
   isLoading = false,
+  onEditTransaction,
+  onAddTransaction,
 }: TransactionListProps) {
   let monthDisplay = selectedMonth;
   try {
@@ -38,8 +43,23 @@ export function TransactionList({
     return (
       <View style={styles.container}>
         <View style={styles.headerRow}>
-          <Text style={styles.sectionTitle}>Transactions</Text>
-          <Text style={styles.countBadge}>0</Text>
+          <View style={styles.headerLeft}>
+            <Text style={styles.sectionTitle}>Transactions</Text>
+            <Text style={styles.countBadge}>0</Text>
+          </View>
+          {onAddTransaction && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add transaction"
+              style={({ pressed }) => [
+                styles.addButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onAddTransaction}
+            >
+              <Text style={styles.addButtonText}>+ Add</Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.emptyContainer}>
@@ -52,6 +72,19 @@ export function TransactionList({
               ? 'Checking for transactions...'
               : 'Income and expense entries logged for this month will appear here.'}
           </Text>
+          {onAddTransaction && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add transaction"
+              style={({ pressed }) => [
+                styles.emptyAddButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onAddTransaction}
+            >
+              <Text style={styles.emptyAddButtonText}>+ Add Transaction</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     );
@@ -60,8 +93,23 @@ export function TransactionList({
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>Transactions</Text>
-        <Text style={styles.countBadge}>{transactions.length}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.sectionTitle}>Transactions</Text>
+          <Text style={styles.countBadge}>{transactions.length}</Text>
+        </View>
+        {onAddTransaction && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add transaction"
+            style={({ pressed }) => [
+              styles.addButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={onAddTransaction}
+          >
+            <Text style={styles.addButtonText}>+ Add</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.listCard}>
@@ -70,6 +118,7 @@ export function TransactionList({
             key={tx.id}
             transaction={tx}
             commitmentName={tx.linkedFixedPaymentId ? commitmentNameMap.get(tx.linkedFixedPaymentId) : undefined}
+            onPress={onEditTransaction ? () => onEditTransaction(tx) : undefined}
           />
         ))}
       </View>
@@ -88,6 +137,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
@@ -101,6 +155,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyAddButton: {
+    marginTop: 16,
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  emptyAddButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  buttonPressed: {
+    opacity: 0.8,
   },
   listCard: {
     backgroundColor: '#ffffff',

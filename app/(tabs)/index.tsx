@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,11 +8,13 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native';
+import type { Transaction } from '@/src/types/finance';
 import { useFinance } from '@/src/features/finance/context';
 import {
   MonthSelector,
   MonthlySummaryCard,
   TransactionList,
+  TransactionFormModal,
 } from '@/src/features/finance/components';
 
 export default function FinanceScreen() {
@@ -27,9 +29,27 @@ export default function FinanceScreen() {
     refresh,
   } = useFinance();
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
   const handleRefresh = useCallback(() => {
     refresh();
   }, [refresh]);
+
+  const handleOpenAdd = useCallback(() => {
+    setEditingTransaction(null);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((tx: Transaction) => {
+    setEditingTransaction(tx);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingTransaction(null);
+  }, []);
 
   return (
     <ScrollView
@@ -84,6 +104,16 @@ export default function FinanceScreen() {
         commitments={commitments}
         selectedMonth={selectedMonth}
         isLoading={isLoading}
+        onAddTransaction={handleOpenAdd}
+        onEditTransaction={handleOpenEdit}
+      />
+
+      {/* 6. Transaction Form Modal (Create / Edit) */}
+      <TransactionFormModal
+        visible={isModalOpen}
+        onClose={handleCloseModal}
+        editingTransaction={editingTransaction}
+        selectedMonth={selectedMonth}
       />
     </ScrollView>
   );

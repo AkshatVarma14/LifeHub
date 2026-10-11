@@ -3,6 +3,7 @@ import {
   StyleSheet,
   View,
   Text,
+  Pressable,
 } from 'react-native';
 import type { Transaction } from '../../../types/finance.ts';
 import { formatPaiseToINR } from '../../../utils/currency.ts';
@@ -11,11 +12,13 @@ import { formatDateDisplay } from '../../../utils/date.ts';
 export interface TransactionItemProps {
   transaction: Transaction;
   commitmentName?: string | null;
+  onPress?: () => void;
 }
 
 export function TransactionItem({
   transaction,
   commitmentName,
+  onPress,
 }: TransactionItemProps) {
   const isIncome = transaction.type === 'income';
 
@@ -30,10 +33,16 @@ export function TransactionItem({
     (isIncome ? '+' : '-') + formatPaiseToINR(transaction.amountPaise);
 
   return (
-    <View
-      style={styles.container}
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.container,
+        pressed && onPress ? styles.pressed : null,
+      ]}
       accessible={true}
-      accessibilityRole="text"
+      accessibilityRole={onPress ? 'button' : 'text'}
+      accessibilityHint={onPress ? 'Tap to edit transaction' : undefined}
       accessibilityLabel={`${transaction.description}, ${transaction.category}, ${formattedAmount}, on ${dateDisplay}`}
     >
       <View style={styles.leftColumn}>
@@ -79,7 +88,7 @@ export function TransactionItem({
           {formattedAmount}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -93,6 +102,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+  },
+  pressed: {
+    opacity: 0.7,
+    backgroundColor: '#f9fafb',
   },
   leftColumn: {
     flex: 1,

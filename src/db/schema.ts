@@ -4,7 +4,7 @@
  * All monetary amounts are stored as integer minor units (paise for INR).
  */
 
-export const TARGET_SCHEMA_VERSION = 1;
+export const TARGET_SCHEMA_VERSION = 2;
 
 export const MIGRATION_V1_SQL = `
 -- Fixed Payment Definitions (TDD §4.1.5 - Schema foundation for foreign keys; UI deferred)
@@ -49,3 +49,28 @@ CREATE TABLE IF NOT EXISTS monthly_budgets (
 
 CREATE INDEX IF NOT EXISTS idx_monthly_budgets_month ON monthly_budgets(month);
 `;
+
+export const MIGRATION_V2_SQL = `
+-- Calendar Events (FR-07)
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY NOT NULL,
+  title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+  start_time TEXT NOT NULL,
+  end_time TEXT CHECK (end_time IS NULL OR end_time >= start_time),
+  category TEXT NOT NULL CHECK (length(trim(category)) > 0),
+  location TEXT,
+  notes TEXT,
+  recurrence TEXT NOT NULL DEFAULT 'none' CHECK (recurrence IN ('none', 'daily', 'weekly', 'monthly', 'yearly')),
+  reminder_minutes_before INTEGER CHECK (reminder_minutes_before IS NULL OR (reminder_minutes_before >= 0 AND reminder_minutes_before <= 43200)),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'email', 'system')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time);
+CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+CREATE INDEX IF NOT EXISTS idx_events_category ON events(category);
+CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+`;
+

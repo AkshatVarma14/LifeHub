@@ -12,7 +12,10 @@ import {
   getNextMonthString,
   formatMonthDisplay,
   formatDateDisplay,
+  normalizeToUtcIso,
+  getUtcMonthRange,
 } from '../../src/utils/date.ts';
+
 
 test('Date Utilities: isLeapYear rules', () => {
   // Typical leap years
@@ -139,4 +142,101 @@ test('Date Utilities: formatMonthDisplay and formatDateDisplay readable formats'
   assert.strictEqual(formatDateDisplay('2025-01-01'), '1 Jan 2025');
   assert.throws(() => formatDateDisplay('2026-02-30'), /Invalid date string/i);
 });
+
+test('Date Utilities: normalizeToUtcIso canonical parsing and offset normalization', () => {
+  // Standard UTC inputs
+  assert.strictEqual(
+    normalizeToUtcIso('2026-10-15T09:30:00.000Z'),
+    '2026-10-15T09:30:00.000Z'
+  );
+  assert.strictEqual(
+    normalizeToUtcIso('2026-10-15T09:30:00Z'),
+    '2026-10-15T09:30:00.000Z'
+  );
+
+  // Positive offset (+05:30)
+  assert.strictEqual(
+    normalizeToUtcIso('2026-10-15T15:00:00+05:30'),
+    '2026-10-15T09:30:00.000Z'
+  );
+
+  // Negative offset (-04:00)
+  assert.strictEqual(
+    normalizeToUtcIso('2026-10-15T05:30:00-04:00'),
+    '2026-10-15T09:30:00.000Z'
+  );
+
+  // Whitespace trimming
+  assert.strictEqual(
+    normalizeToUtcIso('  2026-10-15T09:30:00.000Z  '),
+    '2026-10-15T09:30:00.000Z'
+  );
+
+  // Rejections: empty and non-string
+  assert.throws(() => normalizeToUtcIso(''), /non-empty string/i);
+  assert.throws(() => normalizeToUtcIso('   '), /non-empty string/i);
+  assert.throws(() => normalizeToUtcIso('invalid-date'), /Invalid.*date-time/i);
+  assert.throws(() => normalizeToUtcIso('1850-01-01T00:00:00Z'), /outside allowable bounds/i);
+  assert.throws(() => normalizeToUtcIso('2150-01-01T00:00:00Z'), /outside allowable bounds/i);
+
+  // Calendar dates: rejection of impossible days (prevents silent JS Date rollovers)
+  assert.throws(() => normalizeToUtcIso('2026-02-31T00:00:00.000Z'), /Invalid calendar day '31' for month '2'/i);
+  assert.throws(() => normalizeToUtcIso('2025-02-29T12:00:00Z'), /Invalid calendar day '29' for month '2'/i); // Non-leap year
+  assert.throws(() => normalizeToUtcIso('2026-04-31T12:00:00Z'), /Invalid calendar day '31' for month '4'/i); // April has 30 days
+  assert.throws(() => normalizeToUtcIso('2026-06-31T12:00:00Z'), /Invalid calendar day '31' for month '6'/i); // June has 30 days
+
+  // Valid leap days accepted
+  assert.strictEqual(normalizeToUtcIso('2024-02-29T12:00:00.000Z'), '2024-02-29T12:00:00.000Z');
+  assert.strictEqual(normalizeToUtcIso('2000-02-29T00:00:00Z'), '2000-02-29T00:00:00.000Z');
+
+  // Century boundary non-leap years rejected
+  assert.throws(() => normalizeToUtcIso('1900-02-29T00:00:00Z'), /Invalid calendar day '29' for month '2'/i);
+  assert.throws(() => normalizeToUtcIso('2100-02-29T00:00:00Z'), /Invalid calendar day '29' for month '2'/i);
+
+  // Out of range hours, minutes, seconds rejected
+  assert.throws(() => normalizeToUtcIso('2026-10-15T24:00:00Z'), /Invalid hour '24'/i);
+  assert.throws(() => normalizeToUtcIso('2026-10-15T25:00:00Z'), /Invalid hour '25'/i);
+  assert.throws(() => normalizeToUtcIso('2026-10-15T12:60:00Z'), /Invalid minute '60'/i);
+  assert.throws(() => normalizeToUtcIso('2026-10-15T12:00:60Z'), /Invalid second '60'/i);
+
+  // Invalid timezone offsets rejected
+  assert.throws(() => normalizeToUtcIso('2026-10-15T10:00:00+05:99'), /Invalid timezone offset/i);
+  assert.throws(() => normalizeToUtcIso('2026-10-15T10:00:00+25:00'), /Invalid timezone offset/i);
+
+  // Missing timezone designator rejected (ambiguous local time)
+  assert.throws(() => normalizeToUtcIso('2026-10-15T10:00:00'), /Invalid.*date-time format/i);
+  assert.throws(() => normalizeToUtcIso('2026-10-15 10:00:00'), /Invalid.*date-time format/i);
+
+  // Non-ISO formats rejected
+  assert.throws(() => normalizeToUtcIso('October 15, 2026'), /Invalid.*date-time format/i);
+  assert.throws(() => normalizeToUtcIso('2026/10/15 10:00:00Z'), /Invalid.*date-time format/i);
+});
+
+test('Date Utilities: getUtcMonthRange deterministic half-open UTC bounds', () => {
+  // Standard month
+  const oct = getUtcMonthRange('2026-10');
+  assert.strictEqual(oct.startInclusiveUtc, '2026-10-01T00:00:00.000Z');
+  assert.strictEqual(oct.endExclusiveUtc, '2026-11-01T00:00:00.000Z');
+
+  // Year boundary (December -> January next year)
+  const dec = getUtcMonthRange('2026-12');
+  assert.strictEqual(dec.startInclusiveUtc, '2026-12-01T00:00:00.000Z');
+  assert.strictEqual(dec.endExclusiveUtc, '2027-01-01T00:00:00.000Z');
+
+  // Leap-year February (2024)
+  const leapFeb = getUtcMonthRange('2024-02');
+  assert.strictEqual(leapFeb.startInclusiveUtc, '2024-02-01T00:00:00.000Z');
+  assert.strictEqual(leapFeb.endExclusiveUtc, '2024-03-01T00:00:00.000Z');
+
+  // Non-leap year February (2025)
+  const nonLeapFeb = getUtcMonthRange('2025-02');
+  assert.strictEqual(nonLeapFeb.startInclusiveUtc, '2025-02-01T00:00:00.000Z');
+  assert.strictEqual(nonLeapFeb.endExclusiveUtc, '2025-03-01T00:00:00.000Z');
+
+  // Invalid month inputs
+  assert.throws(() => getUtcMonthRange('invalid-month'), /Invalid month string/i);
+  assert.throws(() => getUtcMonthRange('2026-13'), /Invalid month string/i);
+  assert.throws(() => getUtcMonthRange(''), /Invalid month string/i);
+});
+
 

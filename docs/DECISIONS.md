@@ -57,6 +57,23 @@ The supplied design proposes React Native with Expo and TypeScript; React Naviga
   - Prevents erroneous artificial budget deficits.
   - Test suite must enforce concrete calculation fixtures testing both paid and unpaid committed schedules.
 
+### 2026-10-15 — ADR-03: Calendar Event Persistence, Canonical UTC Timestamps, and Reminder Offset Representation
+- Status: accepted
+- Context: Establishing the persistence schema, timestamp contract, and domain validation for FR-07 (Manual Calendar Events) in SQLite without external dependencies. The original design document (§4.3.4) listed fields `reminder_at`, `source (manual | email | system)`, and `recurrence_rule`.
+- Decisions:
+  1. **Canonical UTC Timestamps:** All persistent timestamps (`start_time`, `end_time`, `created_at`, `updated_at`) are normalized and stored as canonical UTC ISO-8601 strings with millisecond precision and trailing `Z` (`YYYY-MM-DDTHH:mm:ss.sssZ`). This guarantees lexicographical SQLite string comparison matches chronological order and is fully index-accelerated by `idx_events_start_time`.
+  2. **Half-Open Intervals & UTC-Month Semantics:** `getByDateRange` and `getByMonth` query the half-open interval $[startInclusiveUtc, endExclusiveUtc)$ filtering strictly by `start_time`. Multi-day events starting prior to the range are excluded even if they overlap. For the persistence foundation (Slice 5A), `getByMonth` operates on UTC calendar months; timezone-aware local calendar month rendering is deferred to the UI/state slice when a robust approach can be chosen.
+  3. **Reminder Offset (`reminder_minutes_before`):** Stored as a nullable, non-negative integer offset in minutes ($0 \le \text{offset} \le 43200$, default `null`), representing minutes before `start_time`. A relative offset is preferred over a static `reminder_at` timestamp because:
+     - It remains valid without secondary updates if the event is rescheduled.
+     - It maps directly to mobile local notification scheduling triggers.
+     - It decouples persistent user intent from ephemeral execution times.
+  4. **Source Field:** The `source` column is retained and constrained to `'manual' | 'email' | 'system'` (defaulting to `'manual'`). Slice 5A creates manual events only; email and system automated creation are deferred.
+  5. **Recurrence Frequency:** Modeled as an attribute enum (`'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'`). Virtual recurrence instance expansion or materialized generation is deferred.
+- Consequences:
+  - High determinism, index friendliness, and zero external dependencies.
+  - Timezone-aware local calendar month calculations are decoupled from the persistence layer.
+
+
 ## Deferred decisions
 
 - Backend runtime (Node/Fastify vs Python/FastAPI), remote ORM, hosting, and cloud database provider.

@@ -9,6 +9,7 @@ import type {
   MonthlyBudget,
   FixedPayment,
   BudgetSummary,
+  ExpenseCategory,
 } from '../../../types/finance.ts';
 import type {
   TransactionInput,
@@ -44,6 +45,15 @@ export interface FinanceContextValue extends FinanceState {
   // Budget mutations
   setBudget: (input: BudgetInput) => Promise<MonthlyBudget>;
   deleteBudget: (month: string) => Promise<void>;
+  setCategoryLimit: (
+    month: string,
+    category: ExpenseCategory,
+    limitPaise: number
+  ) => Promise<MonthlyBudget>;
+  clearCategoryLimit: (
+    month: string,
+    category: ExpenseCategory
+  ) => Promise<MonthlyBudget | null>;
 
   // Commitment mutations
   addCommitment: (input: FixedPaymentInput) => Promise<FixedPayment>;

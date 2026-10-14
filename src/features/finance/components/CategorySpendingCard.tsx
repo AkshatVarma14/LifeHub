@@ -3,8 +3,10 @@ import {
   StyleSheet,
   View,
   Text,
+  Pressable,
 } from 'react-native';
-import type { CategorySpendingSummary } from '../../../types/finance.ts';
+import type { CategorySpendingSummary, ExpenseCategory } from '../../../types/finance.ts';
+import { isExpenseCategory } from '../constants.ts';
 import { formatPaiseToINR } from '../../../utils/currency.ts';
 import {
   calculateCategoryProgress,
@@ -13,10 +15,12 @@ import {
 
 export interface CategorySpendingCardProps {
   categoryBreakdown: CategorySpendingSummary[];
+  onConfigureCategoryLimit?: (category?: ExpenseCategory) => void;
 }
 
 export function CategorySpendingCard({
   categoryBreakdown,
+  onConfigureCategoryLimit,
 }: CategorySpendingCardProps) {
   const hasCategories = categoryBreakdown.length > 0;
 
@@ -24,12 +28,25 @@ export function CategorySpendingCard({
     <View style={styles.card} accessibilityRole="summary">
       {/* Header */}
       <View style={styles.headerRow}>
-        <View>
+        <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Category Spending</Text>
           <Text style={styles.headerSubtitle}>
             Monthly breakdown against budget limits
           </Text>
         </View>
+        {onConfigureCategoryLimit && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Manage Category Budget Limits"
+            style={({ pressed }) => [
+              styles.manageButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => onConfigureCategoryLimit()}
+          >
+            <Text style={styles.manageButtonText}>Manage Limits</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Empty State */}
@@ -38,6 +55,19 @@ export function CategorySpendingCard({
           <Text style={styles.emptyText}>
             No category spending or budget limits recorded for this month.
           </Text>
+          {onConfigureCategoryLimit && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set Category Limit"
+              style={({ pressed }) => [
+                styles.emptyActionButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => onConfigureCategoryLimit()}
+            >
+              <Text style={styles.emptyActionButtonText}>Set Category Limit</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         /* Category List */
@@ -49,15 +79,27 @@ export function CategorySpendingCard({
             );
             const statusInfo = formatCategorySpendingStatus(item);
             const isLast = index === categoryBreakdown.length - 1;
+            const isKnownExpenseCat = isExpenseCategory(item.category);
 
             return (
-              <View
+              <Pressable
                 key={item.category}
-                style={[styles.categoryItem, isLast && styles.lastCategoryItem]}
-                accessibilityRole="text"
+                style={({ pressed }) => [
+                  styles.categoryItem,
+                  isLast && styles.lastCategoryItem,
+                  pressed && onConfigureCategoryLimit && styles.categoryItemPressed,
+                ]}
+                accessibilityRole="button"
                 accessibilityLabel={`${item.category}: ${formatPaiseToINR(
                   item.actualSpentPaise
-                )} spent. ${statusInfo.limitText}. ${statusInfo.statusText}`}
+                )} spent. ${statusInfo.limitText}. ${statusInfo.statusText}.${
+                  onConfigureCategoryLimit ? ' Tap to edit limit.' : ''
+                }`}
+                onPress={
+                  onConfigureCategoryLimit && isKnownExpenseCat
+                    ? () => onConfigureCategoryLimit(item.category as ExpenseCategory)
+                    : undefined
+                }
               >
                 {/* Row 1: Category Name & Actual Spending */}
                 <View style={styles.itemTopRow}>
@@ -125,7 +167,7 @@ export function CategorySpendingCard({
                     />
                   </View>
                 )}
-              </View>
+              </Pressable>
             );
           })}
         </View>
@@ -150,7 +192,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    paddingRight: 8,
   },
   headerTitle: {
     fontSize: 18,
@@ -161,6 +210,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
     marginTop: 2,
+  },
+  manageButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  manageButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1d4ed8',
+  },
+  emptyActionButton: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#2563eb',
+  },
+  emptyActionButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  categoryItemPressed: {
+    backgroundColor: '#f9fafb',
+  },
+  buttonPressed: {
+    opacity: 0.75,
   },
   emptyContainer: {
     paddingVertical: 18,

@@ -70,6 +70,10 @@ export function FinanceProvider({
       deleteTransaction: (id) => store.deleteTransaction(id),
       setBudget: (input) => store.setBudget(input),
       deleteBudget: (month) => store.deleteBudget(month),
+      setCategoryLimit: (month, category, limitPaise) =>
+        store.setCategoryLimit(month, category, limitPaise),
+      clearCategoryLimit: (month, category) =>
+        store.clearCategoryLimit(month, category),
       addCommitment: (input) => store.addCommitment(input),
       updateCommitment: (id, input) => store.updateCommitment(id, input),
       deleteCommitment: (id) => store.deleteCommitment(id),

@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native';
-import type { Transaction } from '@/src/types/finance';
+import type { Transaction, ExpenseCategory } from '@/src/types/finance';
 import { useFinance } from '@/src/features/finance/context';
 import {
   MonthSelector,
@@ -17,6 +17,7 @@ import {
   TransactionList,
   TransactionFormModal,
   BudgetModal,
+  CategoryLimitModal,
 } from '@/src/features/finance/components';
 
 export default function FinanceScreen() {
@@ -33,7 +34,9 @@ export default function FinanceScreen() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [selectedCategoryForLimit, setSelectedCategoryForLimit] = useState<ExpenseCategory | null>(null);
 
   const handleRefresh = useCallback(() => {
     refresh();
@@ -60,6 +63,16 @@ export default function FinanceScreen() {
 
   const handleCloseBudgetModal = useCallback(() => {
     setIsBudgetModalOpen(false);
+  }, []);
+
+  const handleOpenCategoryLimitModal = useCallback((category?: ExpenseCategory) => {
+    setSelectedCategoryForLimit(category ?? null);
+    setIsCategoryModalOpen(true);
+  }, []);
+
+  const handleCloseCategoryLimitModal = useCallback(() => {
+    setIsCategoryModalOpen(false);
+    setSelectedCategoryForLimit(null);
   }, []);
 
   return (
@@ -115,6 +128,7 @@ export default function FinanceScreen() {
       {/* 5. Category Spending Breakdown */}
       <CategorySpendingCard
         categoryBreakdown={summary.categoryBreakdown}
+        onConfigureCategoryLimit={handleOpenCategoryLimitModal}
       />
 
       {/* 6. Transactions Feed for Selected Month */}
@@ -127,7 +141,7 @@ export default function FinanceScreen() {
         onEditTransaction={handleOpenEdit}
       />
 
-      {/* 6. Transaction Form Modal (Create / Edit) */}
+      {/* 7. Transaction Form Modal (Create / Edit) */}
       <TransactionFormModal
         visible={isModalOpen}
         onClose={handleCloseModal}
@@ -135,11 +149,20 @@ export default function FinanceScreen() {
         selectedMonth={selectedMonth}
       />
 
-      {/* 7. Budget Configuration Modal */}
+      {/* 8. Budget Configuration Modal */}
       <BudgetModal
         visible={isBudgetModalOpen}
         onClose={handleCloseBudgetModal}
         selectedMonth={selectedMonth}
+      />
+
+      {/* 9. Category Budget Limit Configuration Modal */}
+      <CategoryLimitModal
+        visible={isCategoryModalOpen}
+        onClose={handleCloseCategoryLimitModal}
+        selectedMonth={selectedMonth}
+        initialCategory={selectedCategoryForLimit}
+        onRequestOpenBudgetModal={handleOpenBudgetModal}
       />
     </ScrollView>
   );

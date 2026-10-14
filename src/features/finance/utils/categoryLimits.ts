@@ -6,7 +6,7 @@
 
 import type { ExpenseCategory } from '../../../types/finance.ts';
 import { isExpenseCategory } from '../constants.ts';
-import { isValidPaise } from '../../../utils/currency.ts';
+import { isValidPaise, MAX_SAFE_PAISE } from '../../../utils/currency.ts';
 
 /**
  * Category limits map. Category limits are optional per category.
@@ -15,7 +15,7 @@ export type CategoryLimitsMap = Partial<Record<ExpenseCategory, number>>;
 
 export interface ParsedCategoryLimits {
   /**
-   * Valid parsed limits map. Contains only verified expense categories with positive integer paise.
+   * Valid parsed limits map. Contains only verified expense categories with non-negative integer paise.
    */
   limits: CategoryLimitsMap;
 
@@ -25,7 +25,7 @@ export interface ParsedCategoryLimits {
   isCorrupt: boolean;
 
   /**
-   * Keys that failed validation (e.g., unrecognized categories, non-integer or non-positive amounts).
+   * Keys that failed validation (e.g., unrecognized categories, non-integer or negative amounts).
    */
   corruptKeys: string[];
 
@@ -48,6 +48,7 @@ export interface ParsedCategoryLimits {
  * - Does NOT invent default limits or guess values for missing/corrupt keys.
  * - Preserves rawJson intact.
  * - Flags corruption explicitly so callers can warn the user or prompt re-saving.
+ * - Distinguishes unconfigured/absent category limits from configured zero limits (0 paise).
  */
 export function parseCategoryLimitsSafely(rawJson: string | null | undefined): ParsedCategoryLimits {
   if (rawJson === null || rawJson === undefined || rawJson.trim() === '') {
@@ -92,7 +93,7 @@ export function parseCategoryLimitsSafely(rawJson: string | null | undefined): P
       continue;
     }
 
-    if (!isValidPaise(value) || (value as number) <= 0) {
+    if (!isValidPaise(value) || (value as number) < 0 || (value as number) > MAX_SAFE_PAISE) {
       corruptKeys.push(key);
       continue;
     }
@@ -113,7 +114,8 @@ export function parseCategoryLimitsSafely(rawJson: string | null | undefined): P
 /**
  * Serializes a category limits map to a normalized JSON string.
  * Returns null if limits is empty, null, or undefined.
- * Throws an Error if limits contains invalid categories or non-positive amounts.
+ * Throws an Error if limits contains invalid categories or negative amounts.
+ * 0 paise is a valid configured limit.
  */
 export function serializeCategoryLimits(limits: CategoryLimitsMap | null | undefined): string | null {
   if (!limits || Object.keys(limits).length === 0) {
@@ -125,8 +127,8 @@ export function serializeCategoryLimits(limits: CategoryLimitsMap | null | undef
     if (!isExpenseCategory(key)) {
       throw new Error(`Invalid expense category '${key}' for category limits`);
     }
-    if (!isValidPaise(value) || (value as number) <= 0) {
-      throw new Error(`Limit for '${key}' must be a positive integer greater than zero`);
+    if (!isValidPaise(value) || (value as number) < 0 || (value as number) > MAX_SAFE_PAISE) {
+      throw new Error(`Limit for '${key}' must be a non-negative integer paise within safe limits`);
     }
     sanitized[key as ExpenseCategory] = value as number;
   }
@@ -136,4 +138,43 @@ export function serializeCategoryLimits(limits: CategoryLimitsMap | null | undef
   }
 
   return JSON.stringify(sanitized);
+}
+
+/**
+ * Returns a new CategoryLimitsMap with the specified category limit updated or added.
+ * Preserves all other category limits.
+ */
+export function updateCategoryLimit(
+  limits: CategoryLimitsMap,
+  category: ExpenseCategory,
+  limitPaise: number
+): CategoryLimitsMap {
+  if (!isExpenseCategory(category)) {
+    throw new Error(`Invalid expense category '${category}'`);
+  }
+  if (!isValidPaise(limitPaise) || limitPaise < 0 || limitPaise > MAX_SAFE_PAISE) {
+    throw new Error(`Category limit for '${category}' must be a non-negative integer paise within safe limits`);
+  }
+
+  return {
+    ...limits,
+    [category]: limitPaise,
+  };
+}
+
+/**
+ * Returns a new CategoryLimitsMap with the specified category limit removed.
+ * Preserves all other category limits.
+ */
+export function removeCategoryLimit(
+  limits: CategoryLimitsMap,
+  category: ExpenseCategory
+): CategoryLimitsMap {
+  if (!isExpenseCategory(category)) {
+    throw new Error(`Invalid expense category '${category}'`);
+  }
+
+  const updated: CategoryLimitsMap = { ...limits };
+  delete updated[category];
+  return updated;
 }

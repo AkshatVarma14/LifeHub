@@ -170,6 +170,24 @@ test('Finance Validation: validateBudgetInput valid and invalid cases', () => {
   assert.strictEqual(badMonthResult.isValid, false);
   assert.match(badMonthResult.errors[0], /valid YYYY-MM format/i);
 
+  // Category limits with configured zero limit (0 paise) is VALID
+  const zeroCategoryLimitResult = validateBudgetInput({
+    month: '2026-10',
+    totalBudgetPaise: 5000000,
+    categoryLimitsJson: JSON.stringify({ 'Food & Dining': 0, Housing: 2500000 }),
+  });
+  assert.strictEqual(zeroCategoryLimitResult.isValid, true);
+  assert.ok(zeroCategoryLimitResult.sanitized?.categoryLimitsJson?.includes('"Food & Dining":0'));
+
+  // Category limits with negative paise is INVALID
+  const negCategoryLimitResult = validateBudgetInput({
+    month: '2026-10',
+    totalBudgetPaise: 5000000,
+    categoryLimitsJson: JSON.stringify({ 'Food & Dining': -500 }),
+  });
+  assert.strictEqual(negCategoryLimitResult.isValid, false);
+  assert.match(negCategoryLimitResult.errors[0], /non-negative integer/i);
+
   // Malformed JSON string in category limits
   const malformedJsonResult = validateBudgetInput({
     month: '2026-10',

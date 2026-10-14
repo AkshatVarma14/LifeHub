@@ -5,3 +5,5 @@ export * from './TransactionList.tsx';
 export * from './TransactionFormModal.tsx';
 export * from './BudgetModal.tsx';
 export * from './CategorySpendingCard.tsx';
+export * from './CategoryLimitModal.tsx';
+

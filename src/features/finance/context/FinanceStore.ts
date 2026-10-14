@@ -14,6 +14,7 @@ import type {
   MonthlyBudget,
   FixedPayment,
   BudgetSummary,
+  ExpenseCategory,
 } from '../../../types/finance.ts';
 import type {
   TransactionInput,
@@ -27,6 +28,14 @@ import type {
 } from '../repositories/types.ts';
 import { calculateBudgetSummary } from '../calculations.ts';
 import { getCurrentMonthString, isValidMonthString } from '../../../utils/date.ts';
+import { isExpenseCategory } from '../constants.ts';
+import { isValidPaise, MAX_SAFE_PAISE } from '../../../utils/currency.ts';
+import {
+  parseCategoryLimitsSafely,
+  serializeCategoryLimits,
+  updateCategoryLimit,
+  removeCategoryLimit,
+} from '../utils/categoryLimits.ts';
 
 export interface FinanceStoreState {
   selectedMonth: string;
@@ -278,6 +287,133 @@ export class FinanceStore {
       this.state = { ...this.state, isMutating: false };
       this.notify();
     }
+  }
+
+  async setCategoryLimit(
+    month: string,
+    category: ExpenseCategory,
+    limitPaise: number
+  ): Promise<MonthlyBudget> {
+    if (!isValidMonthString(month)) {
+      throw new Error(`Invalid month string '${month}'. Expected format YYYY-MM.`);
+    }
+    if (!isExpenseCategory(category)) {
+      throw new Error(`Invalid expense category '${category}'`);
+    }
+    if (!isValidPaise(limitPaise) || limitPaise < 0 || limitPaise > MAX_SAFE_PAISE) {
+      throw new Error(`Category limit for '${category}' must be a non-negative integer paise within safe limits`);
+    }
+
+    this.state = { ...this.state, isMutating: true };
+    this.notify();
+
+    let saved: MonthlyBudget;
+    try {
+      // Fetch budget directly for pinned month to prevent race conditions with month transitions
+      const existingBudget = await this.budgetRepo.getByMonth(month);
+      if (!existingBudget) {
+        throw new Error(
+          `Cannot set category limit: No monthly budget is configured for month '${month}'. Please configure an overall monthly budget first.`
+        );
+      }
+
+      const parsed = parseCategoryLimitsSafely(existingBudget.categoryLimitsJson);
+      if (
+        parsed.isCorrupt &&
+        (parsed.corruptKeys.includes('__syntax_error__') || parsed.corruptKeys.includes('__not_an_object__'))
+      ) {
+        throw new Error(
+          `Cannot update category limits: Existing category limits data for '${month}' has invalid JSON syntax.`
+        );
+      }
+
+      // Update targeted category limit while preserving all other category limits
+      const updatedLimits = updateCategoryLimit(parsed.limits, category, limitPaise);
+      const categoryLimitsJson = serializeCategoryLimits(updatedLimits);
+
+      saved = await this.budgetRepo.upsert({
+        id: existingBudget.id,
+        month,
+        totalBudgetPaise: existingBudget.totalBudgetPaise,
+        categoryLimitsJson,
+      });
+    } catch (writeErr) {
+      const err = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
+      this.state = { ...this.state, isMutating: false, error: err };
+      this.notify();
+      throw err;
+    }
+
+    try {
+      await this.loadMonthData(this.state.selectedMonth);
+    } catch (refreshErr) {
+      console.warn('Post-category-limit refresh failed:', refreshErr);
+    } finally {
+      this.state = { ...this.state, isMutating: false };
+      this.notify();
+    }
+    return saved;
+  }
+
+  async clearCategoryLimit(
+    month: string,
+    category: ExpenseCategory
+  ): Promise<MonthlyBudget | null> {
+    if (!isValidMonthString(month)) {
+      throw new Error(`Invalid month string '${month}'. Expected format YYYY-MM.`);
+    }
+    if (!isExpenseCategory(category)) {
+      throw new Error(`Invalid expense category '${category}'`);
+    }
+
+    this.state = { ...this.state, isMutating: true };
+    this.notify();
+
+    let saved: MonthlyBudget | null = null;
+    try {
+      const existingBudget = await this.budgetRepo.getByMonth(month);
+      if (!existingBudget) {
+        this.state = { ...this.state, isMutating: false };
+        this.notify();
+        return null;
+      }
+
+      const parsed = parseCategoryLimitsSafely(existingBudget.categoryLimitsJson);
+      if (
+        parsed.isCorrupt &&
+        (parsed.corruptKeys.includes('__syntax_error__') || parsed.corruptKeys.includes('__not_an_object__'))
+      ) {
+        throw new Error(
+          `Cannot update category limits: Existing category limits data for '${month}' has invalid JSON syntax.`
+        );
+      }
+
+      // Remove category from limits
+      const updatedLimits = removeCategoryLimit(parsed.limits, category);
+      const categoryLimitsJson = serializeCategoryLimits(updatedLimits);
+
+      saved = await this.budgetRepo.upsert({
+        id: existingBudget.id,
+        month,
+        totalBudgetPaise: existingBudget.totalBudgetPaise,
+        categoryLimitsJson,
+      });
+    } catch (writeErr) {
+      const err = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
+      this.state = { ...this.state, isMutating: false, error: err };
+      this.notify();
+      throw err;
+    }
+
+    try {
+      await this.loadMonthData(this.state.selectedMonth);
+    } catch (refreshErr) {
+      console.warn('Post-clear-category-limit refresh failed:', refreshErr);
+    } finally {
+      this.state = { ...this.state, isMutating: false };
+      this.notify();
+    }
+    return saved;
   }
 
   async addCommitment(input: FixedPaymentInput): Promise<FixedPayment> {

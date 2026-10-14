@@ -166,8 +166,8 @@ export function validateBudgetInput(input: unknown): ValidationResult<BudgetInpu
             if (!isExpenseCategory(cat)) {
               errors.push(`Invalid expense category '${cat}' in category limits`);
             }
-            if (!isValidPaise(limit) || (limit as number) <= 0) {
-              errors.push(`Limit for category '${cat}' must be a positive integer greater than zero`);
+            if (!isValidPaise(limit) || (limit as number) < 0 || (limit as number) > MAX_SAFE_PAISE) {
+              errors.push(`Limit for category '${cat}' must be a non-negative integer`);
             }
           }
           sanitizedCategoryLimits = JSON.stringify(parsed);

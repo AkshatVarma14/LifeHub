@@ -570,3 +570,196 @@ test('Finance Store: Budget mutation failure leaves state intact and resets muta
   assert.strictEqual(store.getState().isMutating, false);
 });
 
+test('Finance Store: setCategoryLimit and clearCategoryLimit operations, preserving total budget and other limits', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  // 1. Configure initial monthly budget of ₹50,000
+  await store.setBudget({
+    month: '2026-10',
+    totalBudgetPaise: 5000000,
+  });
+
+  // Add an expense transaction in Food & Dining of ₹2,000
+  await store.addTransaction({
+    amountPaise: 200000,
+    type: 'expense',
+    category: 'Food & Dining',
+    date: '2026-10-05',
+    description: 'Dinner',
+  });
+
+  // 2. Set category limit for Food & Dining to ₹1,500
+  await store.setCategoryLimit('2026-10', 'Food & Dining', 150000);
+
+  let state = store.getState();
+  assert.ok(state.monthlyBudget !== null);
+  assert.strictEqual(state.monthlyBudget.totalBudgetPaise, 5000000); // Preserved total budget!
+
+  const foodItem = state.summary.categoryBreakdown.find((c) => c.category === 'Food & Dining');
+  assert.ok(foodItem !== undefined);
+  assert.strictEqual(foodItem.limitPaise, 150000);
+  assert.strictEqual(foodItem.actualSpentPaise, 200000);
+  assert.strictEqual(foodItem.isOverLimit, true);
+  assert.strictEqual(foodItem.remainingPaise, -50000); // ₹500 over
+
+  // 3. Set another category limit for Housing to ₹25,000 (preserves Food & Dining!)
+  await store.setCategoryLimit('2026-10', 'Housing', 2500000);
+
+  state = store.getState();
+  const foodItem2 = state.summary.categoryBreakdown.find((c) => c.category === 'Food & Dining');
+  const housingItem = state.summary.categoryBreakdown.find((c) => c.category === 'Housing');
+  assert.strictEqual(foodItem2?.limitPaise, 150000); // Preserved!
+  assert.strictEqual(housingItem?.limitPaise, 2500000);
+
+  // 4. Set configured zero limit for Transportation (₹0.00 limit)
+  await store.setCategoryLimit('2026-10', 'Transportation', 0);
+
+  state = store.getState();
+  const transportItem = state.summary.categoryBreakdown.find((c) => c.category === 'Transportation');
+  assert.strictEqual(transportItem?.limitPaise, 0); // 0 is distinct from null!
+  assert.strictEqual(transportItem?.actualSpentPaise, 0);
+  assert.strictEqual(transportItem?.isOverLimit, false);
+  assert.strictEqual(transportItem?.remainingPaise, 0);
+
+  // 5. Persistence across fresh store reload
+  const reloadedStore = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await reloadedStore.loadMonthData('2026-10');
+  const reloadedState = reloadedStore.getState();
+  assert.strictEqual(reloadedState.monthlyBudget?.totalBudgetPaise, 5000000);
+
+  const reloadedFood = reloadedState.summary.categoryBreakdown.find((c) => c.category === 'Food & Dining');
+  const reloadedHousing = reloadedState.summary.categoryBreakdown.find((c) => c.category === 'Housing');
+  const reloadedTransport = reloadedState.summary.categoryBreakdown.find((c) => c.category === 'Transportation');
+  assert.strictEqual(reloadedFood?.limitPaise, 150000);
+  assert.strictEqual(reloadedHousing?.limitPaise, 2500000);
+  assert.strictEqual(reloadedTransport?.limitPaise, 0);
+
+  // 6. Clear Transportation limit (preserves Food & Dining and Housing!)
+  await store.clearCategoryLimit('2026-10', 'Transportation');
+
+  state = store.getState();
+  const transportCleared = state.summary.categoryBreakdown.find((c) => c.category === 'Transportation');
+  assert.strictEqual(transportCleared, undefined); // 0 spent and no limit -> omitted from breakdown
+
+  const foodAfterTransportClear = state.summary.categoryBreakdown.find((c) => c.category === 'Food & Dining');
+  const housingAfterTransportClear = state.summary.categoryBreakdown.find((c) => c.category === 'Housing');
+  assert.strictEqual(foodAfterTransportClear?.limitPaise, 150000); // Preserved!
+  assert.strictEqual(housingAfterTransportClear?.limitPaise, 2500000); // Preserved!
+
+  // 7. Clear Food & Dining limit
+  await store.clearCategoryLimit('2026-10', 'Food & Dining');
+
+  state = store.getState();
+  const foodNowNoLimit = state.summary.categoryBreakdown.find((c) => c.category === 'Food & Dining');
+  assert.strictEqual(foodNowNoLimit?.limitPaise, null); // Has spending, but limit is null
+  assert.strictEqual(foodNowNoLimit?.isOverLimit, false);
+
+  const housingStillSet = state.summary.categoryBreakdown.find((c) => c.category === 'Housing');
+  assert.strictEqual(housingStillSet?.limitPaise, 2500000);
+
+  // 8. Clear the final remaining limit (Housing)
+  // Must preserve monthly budget record and set categoryLimitsJson to null
+  await store.clearCategoryLimit('2026-10', 'Housing');
+
+  state = store.getState();
+  assert.ok(state.monthlyBudget !== null);
+  assert.strictEqual(state.monthlyBudget.totalBudgetPaise, 5000000); // Total budget preserved!
+  assert.strictEqual(state.monthlyBudget.categoryLimitsJson, null); // Set to null!
+  assert.strictEqual(state.summary.hasConfiguredBudget, true);
+
+  // Persistence check of cleared limits
+  await reloadedStore.loadMonthData('2026-10');
+  assert.strictEqual(reloadedStore.getState().monthlyBudget?.categoryLimitsJson, null);
+  assert.strictEqual(reloadedStore.getState().monthlyBudget?.totalBudgetPaise, 5000000);
+});
+
+test('Finance Store: Category limit mutation guards, month pinning, and error handling', async () => {
+  const { executor } = createTestDatabase();
+  const txRepo = new SqliteTransactionRepository(executor);
+  const budgetRepo = new SqliteBudgetRepository(executor);
+  const fpRepo = new SqliteFixedPaymentRepository(executor);
+
+  const store = new FinanceStore('2026-10', txRepo, budgetRepo, fpRepo);
+  await store.loadMonthData('2026-10');
+
+  // 1. Rejection when no monthly budget exists
+  await assert.rejects(
+    async () => {
+      await store.setCategoryLimit('2026-10', 'Food & Dining', 500000);
+    },
+    /No monthly budget is configured for month '2026-10'/i
+  );
+  assert.strictEqual(store.getState().isMutating, false);
+
+  // 2. Clearing category limit when no monthly budget exists returns null safely
+  const clearNoBudgetResult = await store.clearCategoryLimit('2026-10', 'Food & Dining');
+  assert.strictEqual(clearNoBudgetResult, null);
+  assert.strictEqual(store.getState().isMutating, false);
+
+  // 3. Configure budget for 2026-10
+  await store.setBudget({ month: '2026-10', totalBudgetPaise: 4000000 });
+
+  // 4. Invalid arguments
+  await assert.rejects(
+    async () => {
+      await store.setCategoryLimit('2026-10', 'InvalidCategory' as any, 50000);
+    },
+    /Invalid expense category/i
+  );
+
+  await assert.rejects(
+    async () => {
+      await store.setCategoryLimit('2026-10', 'Food & Dining', -500);
+    },
+    /non-negative integer paise/i
+  );
+
+  await assert.rejects(
+    async () => {
+      await store.setCategoryLimit('2026-13', 'Food & Dining', 50000);
+    },
+    /Invalid month string/i
+  );
+
+  // 5. Month pinning safety: write to 2026-11 while selectedMonth is 2026-10
+  // First create budget in 2026-11
+  await budgetRepo.upsert({ month: '2026-11', totalBudgetPaise: 6000000 });
+
+  // Call setCategoryLimit pinned to 2026-11
+  await store.setCategoryLimit('2026-11', 'Healthcare', 800000);
+
+  // Store's active view remains 2026-10!
+  assert.strictEqual(store.getState().selectedMonth, '2026-10');
+  assert.strictEqual(store.getState().monthlyBudget?.month, '2026-10');
+  assert.strictEqual(store.getState().monthlyBudget?.totalBudgetPaise, 4000000);
+
+  // Verify 2026-11 was updated in database
+  const novBudget = await budgetRepo.getByMonth('2026-11');
+  assert.ok(novBudget?.categoryLimitsJson?.includes('"Healthcare":800000'));
+  assert.strictEqual(novBudget?.totalBudgetPaise, 6000000);
+
+  // 6. Corrupt JSON syntax guard: if stored JSON syntax is invalid, do not silently overwrite
+  await executor.runAsync(
+    "UPDATE monthly_budgets SET category_limits_json = '{\"bad syntax' WHERE month = '2026-10';"
+  );
+
+  await assert.rejects(
+    async () => {
+      await store.setCategoryLimit('2026-10', 'Food & Dining', 100000);
+    },
+    /invalid JSON syntax/i
+  );
+  assert.strictEqual(store.getState().isMutating, false);
+
+  // Existing corrupted string in DB was NOT overwritten!
+  const unchangedBudget = await budgetRepo.getByMonth('2026-10');
+  assert.strictEqual(unchangedBudget?.categoryLimitsJson, '{"bad syntax');
+});
+
+

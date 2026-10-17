@@ -5,7 +5,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
-import { MIGRATION_V1_SQL, MIGRATION_V2_SQL } from '../../src/db/schema.ts';
+import { MIGRATION_V1_SQL, MIGRATION_V2_SQL, MIGRATION_V3_SQL } from '../../src/db/schema.ts';
 import type { SqliteExecutor } from '../../src/features/finance/repositories/types.ts';
 
 export function createTestDatabase(): { executor: SqliteExecutor; rawDb: DatabaseSync } {
@@ -14,10 +14,11 @@ export function createTestDatabase(): { executor: SqliteExecutor; rawDb: Databas
   // Enforce foreign keys
   db.exec('PRAGMA foreign_keys = ON;');
 
-  // Apply V1 & V2 schema
+  // Apply V1, V2 & V3 schema
   db.exec(MIGRATION_V1_SQL);
   db.exec(MIGRATION_V2_SQL);
-  db.exec('PRAGMA user_version = 2;');
+  db.exec(MIGRATION_V3_SQL);
+  db.exec('PRAGMA user_version = 3;');
 
 
   const executor: SqliteExecutor = {

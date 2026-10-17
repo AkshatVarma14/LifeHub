@@ -1,4 +1,9 @@
-import { MIGRATION_V1_SQL, MIGRATION_V2_SQL, TARGET_SCHEMA_VERSION } from './schema.ts';
+import {
+  MIGRATION_V1_SQL,
+  MIGRATION_V2_SQL,
+  MIGRATION_V3_SQL,
+  TARGET_SCHEMA_VERSION,
+} from './schema.ts';
 
 export { TARGET_SCHEMA_VERSION };
 
@@ -42,6 +47,15 @@ export async function runMigrations(db: MigrationDatabase): Promise<void> {
       await db.execAsync('PRAGMA user_version = 2;');
     });
     currentVersion = 2;
+  }
+
+  // Apply Migration v3 (Habits & Timer sessions vertical slice - FR-08, FR-09)
+  if (currentVersion < 3) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(MIGRATION_V3_SQL);
+      await db.execAsync('PRAGMA user_version = 3;');
+    });
+    currentVersion = 3;
   }
 }
 

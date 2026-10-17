@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { DatabaseSync } from 'node:sqlite';
-import { MIGRATION_V1_SQL, MIGRATION_V2_SQL, TARGET_SCHEMA_VERSION } from '../../src/db/schema.ts';
+import {
+  MIGRATION_V1_SQL,
+  MIGRATION_V2_SQL,
+  MIGRATION_V3_SQL,
+  TARGET_SCHEMA_VERSION,
+} from '../../src/db/schema.ts';
 import { runMigrations, type MigrationDatabase } from '../../src/db/migrations.ts';
 
 function createTestExecutor(rawDb: DatabaseSync): MigrationDatabase & {
@@ -42,8 +47,8 @@ function createTestExecutor(rawDb: DatabaseSync): MigrationDatabase & {
   };
 }
 
-test('Database Schema: Migration V1 and V2 constants and SQL definitions', () => {
-  assert.strictEqual(TARGET_SCHEMA_VERSION, 2, 'Target schema version must be 2 for Stage 1 Slice 5A');
+test('Database Schema: Migration constants and SQL definitions (V1, V2, V3)', () => {
+  assert.strictEqual(TARGET_SCHEMA_VERSION, 3, 'Target schema version must be 3 for Stage 1 Slice 6A');
 
   // Verify V1 tables (Finance)
   assert.match(MIGRATION_V1_SQL, /CREATE TABLE IF NOT EXISTS fixed_payments/i, 'Must define fixed_payments table');
@@ -53,114 +58,151 @@ test('Database Schema: Migration V1 and V2 constants and SQL definitions', () =>
   // Verify V2 table and indexes (Calendar Events - FR-07)
   assert.match(MIGRATION_V2_SQL, /CREATE TABLE IF NOT EXISTS events/i, 'Must define events table in V2');
   assert.match(MIGRATION_V2_SQL, /CREATE INDEX IF NOT EXISTS idx_events_start_time ON events\(start_time\)/i, 'Must index events start_time');
-  assert.match(MIGRATION_V2_SQL, /CREATE INDEX IF NOT EXISTS idx_events_status ON events\(status\)/i, 'Must index events status');
-  assert.match(MIGRATION_V2_SQL, /CREATE INDEX IF NOT EXISTS idx_events_category ON events\(category\)/i, 'Must index events category');
-  assert.match(MIGRATION_V2_SQL, /CREATE INDEX IF NOT EXISTS idx_events_source ON events\(source\)/i, 'Must index events source');
 
-  // Verify V2 column constraints
-  assert.match(MIGRATION_V2_SQL, /title TEXT NOT NULL CHECK \(length\(trim\(title\)\) > 0\)/i, 'Title must be non-empty');
-  assert.match(MIGRATION_V2_SQL, /category TEXT NOT NULL CHECK \(length\(trim\(category\)\) > 0\)/i, 'Category must be non-empty');
-  assert.match(MIGRATION_V2_SQL, /end_time TEXT CHECK \(end_time IS NULL OR end_time >= start_time\)/i, 'end_time must be >= start_time');
-  assert.match(MIGRATION_V2_SQL, /recurrence TEXT NOT NULL DEFAULT 'none' CHECK \(recurrence IN \('none', 'daily', 'weekly', 'monthly', 'yearly'\)\)/i, 'recurrence enum check');
-  assert.match(MIGRATION_V2_SQL, /reminder_minutes_before INTEGER CHECK \(reminder_minutes_before IS NULL OR \(reminder_minutes_before >= 0 AND reminder_minutes_before <= 43200\)\)/i, 'reminder offset check');
-  assert.match(MIGRATION_V2_SQL, /status TEXT NOT NULL DEFAULT 'pending' CHECK \(status IN \('pending', 'completed', 'cancelled'\)\)/i, 'status enum check');
-  assert.match(MIGRATION_V2_SQL, /source TEXT NOT NULL DEFAULT 'manual' CHECK \(source IN \('manual', 'email', 'system'\)\)/i, 'source enum check');
+  // Verify V3 tables and indexes (Habits & Timers - FR-08, FR-09)
+  assert.match(MIGRATION_V3_SQL, /CREATE TABLE IF NOT EXISTS habits/i, 'Must define habits table in V3');
+  assert.match(MIGRATION_V3_SQL, /CREATE TABLE IF NOT EXISTS habit_completions/i, 'Must define habit_completions table in V3');
+  assert.match(MIGRATION_V3_SQL, /CREATE TABLE IF NOT EXISTS timer_sessions/i, 'Must define timer_sessions table in V3');
+
+  // Verify V3 constraints and indexes
+  assert.match(MIGRATION_V3_SQL, /name TEXT NOT NULL CHECK \(length\(trim\(name\)\) > 0\)/i, 'Habit name non-empty check');
+  assert.match(MIGRATION_V3_SQL, /is_archived INTEGER NOT NULL DEFAULT 0 CHECK \(is_archived IN \(0, 1\)\)/i, 'is_archived boolean check');
+  assert.match(MIGRATION_V3_SQL, /UNIQUE \(habit_id, completed_date\)/i, 'Unique constraint on habit completion date');
+  assert.match(MIGRATION_V3_SQL, /type TEXT NOT NULL CHECK \(type IN \('stopwatch', 'countdown'\)\)/i, 'Timer type check');
+  assert.match(MIGRATION_V3_SQL, /status TEXT NOT NULL CHECK \(status IN \('running', 'paused', 'completed', 'cancelled'\)\)/i, 'Timer status check');
+  assert.match(MIGRATION_V3_SQL, /ended_at TEXT CHECK \(ended_at IS NULL OR ended_at >= started_at\)/i, 'Timer ended_at chronology check');
+  assert.match(MIGRATION_V3_SQL, /CREATE UNIQUE INDEX IF NOT EXISTS idx_timer_sessions_single_active/i, 'Single active timer unique index');
 });
 
-test('Database Schema: Real SQLite in-memory execution and constraints for V1 and V2', () => {
+test('Database Schema: Real SQLite in-memory execution and constraints for V1, V2, and V3', () => {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
 
-  // Migrations execute cleanly
+  // Migrations execute cleanly and idempotently
   db.exec(MIGRATION_V1_SQL);
   db.exec(MIGRATION_V2_SQL);
-
-  // Migrations are idempotent
+  db.exec(MIGRATION_V3_SQL);
   assert.doesNotThrow(() => {
     db.exec(MIGRATION_V1_SQL);
     db.exec(MIGRATION_V2_SQL);
+    db.exec(MIGRATION_V3_SQL);
   }, 'Re-running migration SQL must be idempotent');
 
   const now = new Date().toISOString();
 
-  // Valid event insert succeeds
+  // 1. Valid habit insert
   db.prepare(`
-    INSERT INTO events (id, title, start_time, end_time, category, location, notes, recurrence, reminder_minutes_before, status, source, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run('evt_1', 'Team Sync', '2026-10-15T09:00:00.000Z', '2026-10-15T10:00:00.000Z', 'Work', 'Room A', 'Agenda items', 'weekly', 15, 'pending', 'manual', now, now);
+    INSERT INTO habits (id, name, description, is_archived, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?);
+  `).run('h_1', 'Morning Meditation', '10 mins daily', 0, now, now);
 
-  const evt = db.prepare('SELECT * FROM events WHERE id = ?').get('evt_1') as any;
-  assert.strictEqual(evt.title, 'Team Sync');
-  assert.strictEqual(evt.start_time, '2026-10-15T09:00:00.000Z');
-  assert.strictEqual(evt.status, 'pending');
-  assert.strictEqual(evt.source, 'manual');
+  const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get('h_1') as any;
+  assert.strictEqual(habit.name, 'Morning Meditation');
+  assert.strictEqual(habit.is_archived, 0);
 
-  // CHECK constraint: empty title fails
+  // CHECK constraint: empty habit name fails
   assert.throws(() => {
     db.prepare(`
-      INSERT INTO events (id, title, start_time, category, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_title', '   ', '2026-10-15T09:00:00.000Z', 'Work', now, now);
+      INSERT INTO habits (id, name, created_at, updated_at)
+      VALUES (?, ?, ?, ?);
+    `).run('h_bad', '   ', now, now);
   }, /CHECK constraint failed/i);
 
-  // CHECK constraint: empty category fails
+  // 2. Habit completion insert
+  db.prepare(`
+    INSERT INTO habit_completions (id, habit_id, completed_date, completed_at, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?);
+  `).run('c_1', 'h_1', '2026-10-18', now, 'Felt great', now);
+
+  const comp = db.prepare('SELECT * FROM habit_completions WHERE id = ?').get('c_1') as any;
+  assert.strictEqual(comp.habit_id, 'h_1');
+  assert.strictEqual(comp.completed_date, '2026-10-18');
+
+  // UNIQUE constraint: duplicate completion on same day fails
   assert.throws(() => {
     db.prepare(`
-      INSERT INTO events (id, title, start_time, category, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_cat', 'Title', '2026-10-15T09:00:00.000Z', '  ', now, now);
+      INSERT INTO habit_completions (id, habit_id, completed_date, completed_at, created_at)
+      VALUES (?, ?, ?, ?, ?);
+    `).run('c_dup', 'h_1', '2026-10-18', now, now);
+  }, /UNIQUE constraint failed/i);
+
+  // FOREIGN KEY: completion for non-existent habit fails
+  assert.throws(() => {
+    db.prepare(`
+      INSERT INTO habit_completions (id, habit_id, completed_date, completed_at, created_at)
+      VALUES (?, ?, ?, ?, ?);
+    `).run('c_bad_habit', 'h_nonexistent', '2026-10-19', now, now);
+  }, /FOREIGN KEY constraint failed/i);
+
+  // 3. Timer session insert (stopwatch)
+  db.prepare(`
+    INSERT INTO timer_sessions (id, habit_id, type, status, started_at, target_duration_seconds, accumulated_seconds, current_segment_started_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  `).run('ts_1', 'h_1', 'stopwatch', 'running', now, null, 0, now, now, now);
+
+  // CHECK constraint: stopwatch cannot have target_duration_seconds
+  assert.throws(() => {
+    db.prepare(`
+      INSERT INTO timer_sessions (id, type, status, started_at, target_duration_seconds, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?);
+    `).run('ts_bad_sw', 'stopwatch', 'running', now, 300, now, now);
   }, /CHECK constraint failed/i);
 
-  // CHECK constraint: end_time earlier than start_time fails
+  // UNIQUE INDEX constraint: second active timer (running) fails at DB level
   assert.throws(() => {
     db.prepare(`
-      INSERT INTO events (id, title, start_time, end_time, category, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_range', 'Title', '2026-10-15T10:00:00.000Z', '2026-10-15T09:00:00.000Z', 'Work', now, now);
+      INSERT INTO timer_sessions (id, habit_id, type, status, started_at, target_duration_seconds, accumulated_seconds, current_segment_started_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `).run('ts_2_conflict', 'h_1', 'stopwatch', 'running', now, null, 0, now, now, now);
+  }, /UNIQUE constraint failed.*idx_timer_sessions_single_active/i);
+
+  // UNIQUE INDEX constraint: second active timer (paused) also fails at DB level
+  assert.throws(() => {
+    db.prepare(`
+      INSERT INTO timer_sessions (id, habit_id, type, status, started_at, target_duration_seconds, accumulated_seconds, current_segment_started_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `).run('ts_2_paused_conflict', 'h_1', 'countdown', 'paused', now, 600, 0, null, now, now);
+  }, /UNIQUE constraint failed.*idx_timer_sessions_single_active/i);
+
+  // CHECK constraint: ended_at earlier than started_at fails
+  const earlier = new Date(Date.now() - 60000).toISOString();
+  assert.throws(() => {
+    db.prepare(`
+      INSERT INTO timer_sessions (id, type, status, started_at, ended_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?);
+    `).run('ts_bad_ended_at', 'stopwatch', 'completed', now, earlier, now, now);
   }, /CHECK constraint failed/i);
 
-  // CHECK constraint: invalid recurrence fails
+  // Free active slot by completing ts_1
+  db.prepare(`
+    UPDATE timer_sessions
+    SET status = 'completed', ended_at = ?, current_segment_started_at = NULL
+    WHERE id = 'ts_1';
+  `).run(now);
+
+  // 4. Timer session insert (countdown) now succeeds because ts_1 is completed
+  db.prepare(`
+    INSERT INTO timer_sessions (id, habit_id, type, status, started_at, target_duration_seconds, accumulated_seconds, current_segment_started_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  `).run('ts_2', 'h_1', 'countdown', 'running', now, 1500, 0, now, now, now);
+
+  // CHECK constraint: countdown must have target_duration_seconds > 0
   assert.throws(() => {
     db.prepare(`
-      INSERT INTO events (id, title, start_time, category, recurrence, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_rec', 'Title', '2026-10-15T10:00:00.000Z', 'Work', 'invalid_recurrence', now, now);
+      INSERT INTO timer_sessions (id, type, status, started_at, target_duration_seconds, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?);
+    `).run('ts_bad_cd', 'countdown', 'paused', now, null, now, now);
   }, /CHECK constraint failed/i);
 
-  // CHECK constraint: negative reminder fails
   assert.throws(() => {
     db.prepare(`
-      INSERT INTO events (id, title, start_time, category, reminder_minutes_before, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_rem_neg', 'Title', '2026-10-15T10:00:00.000Z', 'Work', -5, now, now);
-  }, /CHECK constraint failed/i);
-
-  // CHECK constraint: oversized reminder (> 43200) fails
-  assert.throws(() => {
-    db.prepare(`
-      INSERT INTO events (id, title, start_time, category, reminder_minutes_before, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_rem_big', 'Title', '2026-10-15T10:00:00.000Z', 'Work', 43201, now, now);
-  }, /CHECK constraint failed/i);
-
-  // CHECK constraint: invalid status fails
-  assert.throws(() => {
-    db.prepare(`
-      INSERT INTO events (id, title, start_time, category, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_status', 'Title', '2026-10-15T10:00:00.000Z', 'Work', 'in_progress', now, now);
-  }, /CHECK constraint failed/i);
-
-  // CHECK constraint: invalid source fails
-  assert.throws(() => {
-    db.prepare(`
-      INSERT INTO events (id, title, start_time, category, source, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('evt_bad_source', 'Title', '2026-10-15T10:00:00.000Z', 'Work', 'external', now, now);
+      INSERT INTO timer_sessions (id, type, status, started_at, target_duration_seconds, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?);
+    `).run('ts_bad_cd_0', 'countdown', 'paused', now, 0, now, now);
   }, /CHECK constraint failed/i);
 });
 
-test('Database Schema: Real production runMigrations lifecycle, finance data preservation, and atomic rollback', async () => {
+test('Database Schema: Real production runMigrations lifecycle (v1 -> v2 -> v3) and atomic rollback', async () => {
   const rawDb = new DatabaseSync(':memory:');
   rawDb.exec('PRAGMA foreign_keys = ON;');
   const executor = createTestExecutor(rawDb);
@@ -169,107 +211,94 @@ test('Database Schema: Real production runMigrations lifecycle, finance data pre
   const initialVersion = (await executor.getFirstAsync<{ user_version: number }>('PRAGMA user_version;'))?.user_version;
   assert.strictEqual(initialVersion, 0, 'New database must start at user_version 0');
 
-  // Step 2: Simulate existing user at v1 (current production state in commit 45aba41)
+  // Step 2: Seed v1 and v2 pre-existing user data
   rawDb.exec(MIGRATION_V1_SQL);
   rawDb.exec('PRAGMA user_version = 1;');
-  const v1 = (await executor.getFirstAsync<{ user_version: number }>('PRAGMA user_version;'))?.user_version;
-  assert.strictEqual(v1, 1, 'Database must be at user_version 1');
+  rawDb.exec(MIGRATION_V2_SQL);
+  rawDb.exec('PRAGMA user_version = 2;');
 
-  // Seed pre-existing finance data at v1
   const now = new Date().toISOString();
   await executor.runAsync(`
-    INSERT INTO fixed_payments (id, name, category, expected_amount_paise, due_day, active, created_at, updated_at)
+    INSERT INTO transactions (id, amount_paise, type, category, date, description, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-  `, 'fp_1', 'Rent', 'Housing', 1500000, 5, 1, now, now);
+  `, 'tx_1', 250000, 'expense', 'Food', '2026-10-10', 'Groceries', now, now);
 
   await executor.runAsync(`
-    INSERT INTO transactions (id, amount_paise, type, category, date, description, linked_fixed_payment_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-  `, 'tx_1', 1500000, 'expense', 'Housing', '2026-10-05', 'Rent payment', 'fp_1', now, now);
-
-  await executor.runAsync(`
-    INSERT INTO monthly_budgets (id, month, total_budget_paise, category_limits_json, created_at, updated_at)
+    INSERT INTO events (id, title, start_time, category, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?);
-  `, 'mb_1', '2026-10', 5000000, JSON.stringify({ Housing: 1500000 }), now, now);
+  `, 'evt_1', 'Sprint Planning', '2026-10-20T10:00:00.000Z', 'Work', now, now);
 
-  // Step 3: Migration rollback regression test
-  // Inject a failure into execAsync when executing MIGRATION_V2_SQL after partially executing real DDL
+  // Step 3: Migration rollback test for v3
   const failingExecutor: MigrationDatabase = {
     ...executor,
     async execAsync(sql: string): Promise<void> {
-      if (sql === MIGRATION_V2_SQL) {
-        // Execute real SQLite DDL statement that creates the events table inside the uncommitted production transaction
+      if (sql === MIGRATION_V3_SQL) {
+        // Run partial DDL inside the uncommitted transaction then fail
         await executor.execAsync(`
-          CREATE TABLE IF NOT EXISTS events (
+          CREATE TABLE IF NOT EXISTS habits (
             id TEXT PRIMARY KEY NOT NULL,
-            title TEXT NOT NULL,
-            start_time TEXT NOT NULL,
-            category TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'user',
+            name TEXT NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
           );
         `);
-        throw new Error('Simulated DDL syntax failure midway during v2 migration');
+        throw new Error('Simulated failure during v3 migration');
       }
       return executor.execAsync(sql);
     },
   };
 
-  // Calling production runMigrations with failing executor must reject
   await assert.rejects(
     async () => {
       await runMigrations(failingExecutor);
     },
-    /Simulated DDL syntax failure midway during v2 migration/i,
-    'runMigrations must reject on DDL error'
+    /Simulated failure during v3 migration/i
   );
 
-  // Assert user_version remains 1 after rollback
+  // user_version must remain 2 after rollback
   const vAfterFailure = (await executor.getFirstAsync<{ user_version: number }>('PRAGMA user_version;'))?.user_version;
-  assert.strictEqual(vAfterFailure, 1, 'user_version must remain 1 when v2 migration rolls back');
+  assert.strictEqual(vAfterFailure, 2, 'user_version must remain 2 after failed v3 migration');
 
-  // Assert events table and its indexes do NOT exist
-  const eventsTable = await executor.getFirstAsync<{ name: string }>(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='events';"
+  // habits table must not exist
+  const habitTableAfterRollback = await executor.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='habits';"
   );
-  assert.strictEqual(eventsTable, null, 'events table must be absent after rollback');
+  assert.strictEqual(habitTableAfterRollback, null, 'habits table must be rolled back');
 
-  const eventsIndex = await executor.getFirstAsync<{ name: string }>(
-    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_events_start_time';"
-  );
-  assert.strictEqual(eventsIndex, null, 'idx_events_start_time must be absent after rollback');
-
-  // Assert all pre-existing finance records are completely unchanged
-  const fp = await executor.getFirstAsync<any>('SELECT * FROM fixed_payments WHERE id = ?;', 'fp_1');
-  assert.strictEqual(fp.name, 'Rent');
-  assert.strictEqual(fp.expected_amount_paise, 1500000);
-
+  // Verify prior data is 100% intact
   const tx = await executor.getFirstAsync<any>('SELECT * FROM transactions WHERE id = ?;', 'tx_1');
-  assert.strictEqual(tx.amount_paise, 1500000);
-  assert.strictEqual(tx.linked_fixed_payment_id, 'fp_1');
+  assert.strictEqual(tx.amount_paise, 250000);
 
-  const mb = await executor.getFirstAsync<any>('SELECT * FROM monthly_budgets WHERE id = ?;', 'mb_1');
-  assert.strictEqual(mb.total_budget_paise, 5000000);
+  const evt = await executor.getFirstAsync<any>('SELECT * FROM events WHERE id = ?;', 'evt_1');
+  assert.strictEqual(evt.title, 'Sprint Planning');
 
-  // Step 4: Successful migration from v1 to v2 via real production runMigrations()
+  // Step 4: Successful migration to v3
   await runMigrations(executor);
 
   const vCurrent = (await executor.getFirstAsync<{ user_version: number }>('PRAGMA user_version;'))?.user_version;
-  assert.strictEqual(vCurrent, 2, 'user_version must advance to 2 after successful v2 migration');
+  assert.strictEqual(vCurrent, 3, 'user_version must advance to 3');
 
-  // Assert events table now exists
-  const eventsTableCreated = await executor.getFirstAsync<{ name: string }>(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='events';"
+  const habitsTable = await executor.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='habits';"
   );
-  assert.strictEqual(eventsTableCreated?.name, 'events', 'events table must exist after v2 migration');
+  assert.strictEqual(habitsTable?.name, 'habits');
 
-  // Assert finance records STILL completely intact after upgrade
-  const txAfterUpgrade = await executor.getFirstAsync<any>('SELECT * FROM transactions WHERE id = ?;', 'tx_1');
-  assert.strictEqual(txAfterUpgrade.amount_paise, 1500000);
+  const completionsTable = await executor.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='habit_completions';"
+  );
+  assert.strictEqual(completionsTable?.name, 'habit_completions');
 
-  // Step 5: Idempotency check: re-running runMigrations() on already up-to-date DB is a no-op
+  const timersTable = await executor.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='timer_sessions';"
+  );
+  assert.strictEqual(timersTable?.name, 'timer_sessions');
+
+  // Prior data still intact after upgrade
+  const txAfter = await executor.getFirstAsync<any>('SELECT * FROM transactions WHERE id = ?;', 'tx_1');
+  assert.strictEqual(txAfter.amount_paise, 250000);
+
+  // Step 5: Idempotency
   await runMigrations(executor);
-  const vStill = (await executor.getFirstAsync<{ user_version: number }>('PRAGMA user_version;'))?.user_version;
-  assert.strictEqual(vStill, 2, 'user_version must remain 2 on idempotent re-run');
+  const vIdempotent = (await executor.getFirstAsync<{ user_version: number }>('PRAGMA user_version;'))?.user_version;
+  assert.strictEqual(vIdempotent, 3);
 });

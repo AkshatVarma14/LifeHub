@@ -42,6 +42,72 @@ export interface EventFormData {
 const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /**
+ * Auto-aligns end date and time when enabling end time.
+ * If the current end date/time is earlier than start date/time (or missing/invalid),
+ * returns a new end date and time set to start date/time plus durationMinutes (default 60).
+ * Handles midnight and month/date/year rollover correctly.
+ * If current end date/time is already valid and >= start date/time, preserves it.
+ */
+export function alignEndDateTime(
+  startDateStr: string,
+  startTimeStr: string,
+  currentEndDateStr?: string,
+  currentEndTimeStr?: string,
+  durationMinutes = 60
+): { endDate: string; endTime: string } {
+  const fallbackEndDate = isValidDateString(startDateStr) ? startDateStr : getTodayDateString();
+  const fallbackEndTime = '10:00';
+
+  if (!isValidDateString(startDateStr) || !TIME_REGEX.test(startTimeStr)) {
+    return {
+      endDate: currentEndDateStr && isValidDateString(currentEndDateStr) ? currentEndDateStr : fallbackEndDate,
+      endTime: currentEndTimeStr && TIME_REGEX.test(currentEndTimeStr) ? currentEndTimeStr : fallbackEndTime,
+    };
+  }
+
+  const [sYear, sMonth, sDay] = startDateStr.split('-').map(Number);
+  const [sHours, sMins] = startTimeStr.split(':').map(Number);
+  const localStart = new Date(sYear, sMonth - 1, sDay, sHours, sMins, 0, 0);
+
+  if (isNaN(localStart.getTime())) {
+    return { endDate: fallbackEndDate, endTime: fallbackEndTime };
+  }
+
+  // Check if current end date and time are provided and valid
+  if (
+    currentEndDateStr &&
+    isValidDateString(currentEndDateStr) &&
+    currentEndTimeStr &&
+    TIME_REGEX.test(currentEndTimeStr)
+  ) {
+    const [eYear, eMonth, eDay] = currentEndDateStr.split('-').map(Number);
+    const [eHours, eMins] = currentEndTimeStr.split(':').map(Number);
+    const localEnd = new Date(eYear, eMonth - 1, eDay, eHours, eMins, 0, 0);
+
+    // If existing end date/time is valid and strictly >= start date/time, preserve it!
+    if (!isNaN(localEnd.getTime()) && localEnd.getTime() >= localStart.getTime()) {
+      return {
+        endDate: currentEndDateStr,
+        endTime: currentEndTimeStr,
+      };
+    }
+  }
+
+  // Otherwise, default to start date/time plus durationMinutes (default 60 min)
+  const defaultEnd = new Date(localStart.getTime() + durationMinutes * 60 * 1000);
+  const endYear = defaultEnd.getFullYear();
+  const endMonth = String(defaultEnd.getMonth() + 1).padStart(2, '0');
+  const endDay = String(defaultEnd.getDate()).padStart(2, '0');
+  const endHours = String(defaultEnd.getHours()).padStart(2, '0');
+  const endMins = String(defaultEnd.getMinutes()).padStart(2, '0');
+
+  return {
+    endDate: `${endYear}-${endMonth}-${endDay}`,
+    endTime: `${endHours}:${endMins}`,
+  };
+}
+
+/**
  * Returns initial form data for creating a new calendar event or editing an existing one.
  */
 export function getInitialEventFormData(

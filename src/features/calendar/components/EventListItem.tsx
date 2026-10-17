@@ -12,7 +12,6 @@ export interface EventListItemProps {
   event: CalendarEvent;
   onUpdateStatus: (id: string, status: EventStatus) => Promise<unknown>;
   onEdit?: (event: CalendarEvent) => void;
-  onDelete?: (id: string) => Promise<unknown>;
   isMutating?: boolean;
 }
 
@@ -29,7 +28,6 @@ export function EventListItem({
   event,
   onUpdateStatus,
   onEdit,
-  onDelete,
   isMutating = false,
 }: EventListItemProps) {
   const startTimeFormatted = formatTimeDisplay(event.startTime);
@@ -52,15 +50,6 @@ export function EventListItem({
       return;
     }
     onUpdateStatus(event.id, newStatus).catch(() => {
-      // Error handled by store
-    });
-  };
-
-  const handleDelete = () => {
-    if (isMutating || !onDelete) {
-      return;
-    }
-    onDelete(event.id).catch(() => {
       // Error handled by store
     });
   };
@@ -223,22 +212,6 @@ export function EventListItem({
               <Text style={styles.editButtonText}>Edit</Text>
             </Pressable>
           )}
-
-          {onDelete && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Delete event ${event.title}`}
-              disabled={isMutating}
-              onPress={handleDelete}
-              style={({ pressed }) => [
-                styles.deleteButton,
-                pressed && styles.buttonPressed,
-                isMutating && styles.buttonDisabled,
-              ]}
-            >
-              <Text style={styles.deleteButtonText}>Delete</Text>
-            </Pressable>
-          )}
         </View>
       </View>
     </View>
@@ -380,19 +353,6 @@ const styles = StyleSheet.create({
   },
   statusButtonTextActive: {
     color: '#111827',
-  },
-  deleteButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    backgroundColor: '#fff1f2',
-    borderWidth: 1,
-    borderColor: '#fecdd3',
-  },
-  deleteButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#e11d48',
   },
   rightActionButtons: {
     flexDirection: 'row',

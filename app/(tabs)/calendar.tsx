@@ -24,7 +24,6 @@ export default function CalendarScreen() {
     isMutating,
     error,
     updateEventStatus,
-    deleteEvent,
     refresh,
   } = useCalendar();
 
@@ -95,7 +94,6 @@ export default function CalendarScreen() {
         isLoading={isLoading}
         isMutating={isMutating}
         onUpdateStatus={updateEventStatus}
-        onDelete={deleteEvent}
         onEdit={handleOpenEdit}
         onAddEvent={handleOpenAdd}
       />

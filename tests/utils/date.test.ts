@@ -14,6 +14,7 @@ import {
   formatDateDisplay,
   normalizeToUtcIso,
   getUtcMonthRange,
+  getLocalMonthUtcRange,
   formatTimeDisplay,
   formatLocalDateKey,
   formatEventDateHeader,
@@ -261,6 +262,53 @@ test('Date Utilities: formatTimeDisplay, formatLocalDateKey, and formatEventDate
   assert.strictEqual(formatEventDateHeader('2026-10-15'), 'Thu, 15 Oct 2026');
   assert.strictEqual(formatEventDateHeader('2026-01-01'), 'Thu, 1 Jan 2026');
 });
+
+test('Date Utilities: getLocalMonthUtcRange half-open bounds and timezone handling', () => {
+  // Rejections for invalid months
+  assert.throws(() => getLocalMonthUtcRange(''), /Invalid month string/i);
+  assert.throws(() => getLocalMonthUtcRange('2026-13'), /Invalid month string/i);
+  assert.throws(() => getLocalMonthUtcRange('not-a-month'), /Invalid month string/i);
+
+  // General validity: start < end, ISO format with Z
+  const oct = getLocalMonthUtcRange('2026-10');
+  assert.ok(oct.startInclusiveUtc < oct.endExclusiveUtc);
+  assert.match(oct.startInclusiveUtc, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.match(oct.endExclusiveUtc, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+  // Year boundary rollover (December -> January next year)
+  const dec = getLocalMonthUtcRange('2026-12');
+  assert.ok(dec.startInclusiveUtc < dec.endExclusiveUtc);
+
+  // Preserve original TZ
+  const originalTz = process.env.TZ;
+  try {
+    // 1. In UTC timezone
+    process.env.TZ = 'UTC';
+    const utcRange = getLocalMonthUtcRange('2026-10');
+    assert.strictEqual(utcRange.startInclusiveUtc, '2026-10-01T00:00:00.000Z');
+    assert.strictEqual(utcRange.endExclusiveUtc, '2026-11-01T00:00:00.000Z');
+
+    // 2. In positive offset timezone (Asia/Kolkata: UTC+05:30)
+    process.env.TZ = 'Asia/Kolkata';
+    const istRange = getLocalMonthUtcRange('2026-10');
+    assert.strictEqual(istRange.startInclusiveUtc, '2026-09-30T18:30:00.000Z');
+    assert.strictEqual(istRange.endExclusiveUtc, '2026-10-31T18:30:00.000Z');
+
+    // 3. In negative offset timezone (America/New_York: UTC-04:00 in October)
+    process.env.TZ = 'America/New_York';
+    const edtRange = getLocalMonthUtcRange('2026-10');
+    assert.strictEqual(edtRange.startInclusiveUtc, '2026-10-01T04:00:00.000Z');
+    assert.strictEqual(edtRange.endExclusiveUtc, '2026-11-01T04:00:00.000Z');
+
+    // 4. Year boundary in America/New_York (December: UTC-05:00 EST)
+    const edtDec = getLocalMonthUtcRange('2026-12');
+    assert.strictEqual(edtDec.startInclusiveUtc, '2026-12-01T05:00:00.000Z');
+    assert.strictEqual(edtDec.endExclusiveUtc, '2027-01-01T05:00:00.000Z');
+  } finally {
+    process.env.TZ = originalTz;
+  }
+});
+
 
 
 

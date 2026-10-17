@@ -21,7 +21,6 @@ export interface EventListProps {
   isMutating?: boolean;
   onUpdateStatus: (id: string, status: EventStatus) => Promise<unknown>;
   onEdit?: (event: CalendarEvent) => void;
-  onDelete?: (id: string) => Promise<unknown>;
   onAddEvent?: () => void;
 }
 
@@ -32,7 +31,6 @@ export function EventList({
   isMutating = false,
   onUpdateStatus,
   onEdit,
-  onDelete,
   onAddEvent,
 }: EventListProps) {
   let formattedMonth = selectedMonth;
@@ -143,7 +141,6 @@ export function EventList({
                 event={event}
                 onUpdateStatus={onUpdateStatus}
                 onEdit={onEdit}
-                onDelete={onDelete}
                 isMutating={isMutating}
               />
             ))}

@@ -19,6 +19,7 @@ import {
   isValidMonthString,
   extractMonthFromDate,
   formatLocalDateKey,
+  getLocalMonthUtcRange,
 } from '../../../utils/date.ts';
 
 const VALID_STATUSES: readonly EventStatus[] = ['pending', 'completed', 'cancelled'];
@@ -75,7 +76,8 @@ export class CalendarStore {
     this.notify();
 
     try {
-      const events = await this.eventRepo.getByMonth(month);
+      const { startInclusiveUtc, endExclusiveUtc } = getLocalMonthUtcRange(month);
+      const events = await this.eventRepo.getByDateRange(startInclusiveUtc, endExclusiveUtc);
 
       // If a newer request has started (e.g. rapid month switching), discard this stale result
       if (requestId !== this.activeRequestId) {

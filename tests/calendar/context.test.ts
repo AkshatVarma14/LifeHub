@@ -138,14 +138,14 @@ test('Calendar Store: Stale request ID discards older out-of-order month loads',
 
   const store = new CalendarStore('2026-10', repo);
 
-  // Custom delay simulation on repo.getByMonth
-  const originalGetByMonth = repo.getByMonth.bind(repo);
-  repo.getByMonth = async (m: string) => {
-    if (m === '2026-10') {
+  // Custom delay simulation on repo.getByDateRange
+  const originalGetByDateRange = repo.getByDateRange.bind(repo);
+  repo.getByDateRange = async (s: string, e: string) => {
+    if (s.includes('2026-10') || s.includes('2026-09')) {
       // Artificially delay October
       await new Promise((r) => setTimeout(r, 60));
     }
-    return originalGetByMonth(m);
+    return originalGetByDateRange(s, e);
   };
 
   // Launch slow October load, immediately followed by fast November load
@@ -245,14 +245,14 @@ test('Calendar Store: Persisted write succeeds even if subsequent refresh fails'
   const store = new CalendarStore('2026-10', repo);
   await store.loadMonth('2026-10');
 
-  // Force getByMonth to fail during the post-write refresh
+  // Force getByDateRange to fail during the post-write refresh
   let updateCalled = false;
-  const originalGetByMonth = repo.getByMonth.bind(repo);
-  repo.getByMonth = async (m: string) => {
+  const originalGetByDateRange = repo.getByDateRange.bind(repo);
+  repo.getByDateRange = async (s: string, e: string) => {
     if (updateCalled) {
       throw new Error('Simulated refresh database failure');
     }
-    return originalGetByMonth(m);
+    return originalGetByDateRange(s, e);
   };
 
   updateCalled = true;
@@ -337,7 +337,7 @@ test('Calendar Store: Repository query error sets error and resets loading', asy
   const { executor } = createTestDatabase();
   const repo = new SqliteEventRepository(executor);
 
-  repo.getByMonth = async () => {
+  repo.getByDateRange = async () => {
     throw new Error('Database connection failed');
   };
 
@@ -479,4 +479,117 @@ test('Calendar Store: updateEvent updates event in SQLite and refreshes state', 
   );
   assert.strictEqual(store.getState().isMutating, false);
 });
+
+test('Calendar Store: Local month boundaries correctly load events in positive offset timezone (Asia/Kolkata)', async () => {
+  const originalTz = process.env.TZ;
+  try {
+    // Simulate Asia/Kolkata (UTC+05:30)
+    process.env.TZ = 'Asia/Kolkata';
+
+    const { executor } = createTestDatabase();
+    const repo = new SqliteEventRepository(executor);
+
+    // Event 1: Oct 1 at 01:00 AM local time (in UTC: 2026-09-30T19:30:00.000Z)
+    // Note that the UTC timestamp has month 09, but locally it is Oct 1!
+    await repo.create({
+      title: 'Early Oct IST Event',
+      startTime: '2026-09-30T19:30:00.000Z',
+      category: 'Work',
+    });
+
+    // Event 2: Oct 31 at 23:30 local time (in UTC: 2026-10-31T18:00:00.000Z)
+    await repo.create({
+      title: 'Late Oct IST Event',
+      startTime: '2026-10-31T18:00:00.000Z',
+      category: 'Work',
+    });
+
+    // Event 3: Sep 30 at 23:45 local time (in UTC: 2026-09-30T18:15:00.000Z - belongs to Sep)
+    await repo.create({
+      title: 'Sep IST Event',
+      startTime: '2026-09-30T18:15:00.000Z',
+      category: 'Work',
+    });
+
+    // Event 4: Nov 1 at 00:30 local time (in UTC: 2026-10-31T19:00:00.000Z - belongs to Nov)
+    await repo.create({
+      title: 'Nov IST Event',
+      startTime: '2026-10-31T19:00:00.000Z',
+      category: 'Work',
+    });
+
+    const store = new CalendarStore('2026-10', repo);
+    await store.loadMonth('2026-10');
+
+    // Both Event 1 and Event 2 MUST be loaded for October 2026!
+    const octEvents = store.getState().events;
+    assert.strictEqual(octEvents.length, 2);
+    assert.strictEqual(octEvents[0].title, 'Early Oct IST Event');
+    assert.strictEqual(octEvents[1].title, 'Late Oct IST Event');
+
+    // Load September: Event 3 must be in September
+    await store.loadMonth('2026-09');
+    const sepEvents = store.getState().events;
+    assert.strictEqual(sepEvents.length, 1);
+    assert.strictEqual(sepEvents[0].title, 'Sep IST Event');
+
+    // Load November: Event 4 must be in November
+    await store.loadMonth('2026-11');
+    const novEvents = store.getState().events;
+    assert.strictEqual(novEvents.length, 1);
+    assert.strictEqual(novEvents[0].title, 'Nov IST Event');
+  } finally {
+    process.env.TZ = originalTz;
+  }
+});
+
+test('Calendar Store: Local month boundaries correctly load events in negative offset timezone (America/New_York)', async () => {
+  const originalTz = process.env.TZ;
+  try {
+    // Simulate America/New_York (UTC-04:00 in October)
+    process.env.TZ = 'America/New_York';
+
+    const { executor } = createTestDatabase();
+    const repo = new SqliteEventRepository(executor);
+
+    // Event 1: Oct 1 at 00:30 local EDT (in UTC: 2026-10-01T04:30:00.000Z)
+    await repo.create({
+      title: 'Early Oct EDT Event',
+      startTime: '2026-10-01T04:30:00.000Z',
+      category: 'Work',
+    });
+
+    // Event 2: Oct 31 at 23:30 local EDT (in UTC: 2026-11-01T03:30:00.000Z - UTC is in Nov, but locally in Oct!)
+    await repo.create({
+      title: 'Late Oct EDT Event',
+      startTime: '2026-11-01T03:30:00.000Z',
+      category: 'Work',
+    });
+
+    // Event 3: Sep 30 at 23:30 local EDT (in UTC: 2026-10-01T03:30:00.000Z - UTC is in Oct, but locally in Sep!)
+    await repo.create({
+      title: 'Sep EDT Event',
+      startTime: '2026-10-01T03:30:00.000Z',
+      category: 'Work',
+    });
+
+    const store = new CalendarStore('2026-10', repo);
+    await store.loadMonth('2026-10');
+
+    // October must include Event 1 and Event 2, and EXCLUDE Event 3!
+    const octEvents = store.getState().events;
+    assert.strictEqual(octEvents.length, 2);
+    assert.strictEqual(octEvents[0].title, 'Early Oct EDT Event');
+    assert.strictEqual(octEvents[1].title, 'Late Oct EDT Event');
+
+    // September must include Event 3
+    await store.loadMonth('2026-09');
+    const sepEvents = store.getState().events;
+    assert.strictEqual(sepEvents.length, 1);
+    assert.strictEqual(sepEvents[0].title, 'Sep EDT Event');
+  } finally {
+    process.env.TZ = originalTz;
+  }
+});
+
 

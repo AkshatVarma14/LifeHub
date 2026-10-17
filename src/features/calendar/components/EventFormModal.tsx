@@ -22,6 +22,7 @@ import {
   type EventFormData,
   getInitialEventFormData,
   validateAndMapEventForm,
+  alignEndDateTime,
 } from '../utils/eventForm.ts';
 import { getTodayDateString } from '../../../utils/date.ts';
 
@@ -105,17 +106,19 @@ export function EventFormModal({
 
   const handleDurationPreset = (minutesToAdd: number) => {
     try {
-      const [h, m] = formData.startTime.split(':').map(Number);
-      const totalMinutes = h * 60 + m + minutesToAdd;
-      const endH = Math.floor(totalMinutes / 60) % 24;
-      const endM = totalMinutes % 60;
-      const computedEndTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      const aligned = alignEndDateTime(
+        formData.startDate,
+        formData.startTime,
+        undefined,
+        undefined,
+        minutesToAdd
+      );
 
       setFormData((prev) => ({
         ...prev,
         hasEndTime: true,
-        endDate: prev.startDate,
-        endTime: computedEndTime,
+        endDate: aligned.endDate,
+        endTime: aligned.endTime,
       }));
       setFormError(null);
     } catch {
@@ -339,11 +342,27 @@ export function EventFormModal({
                 accessibilityLabel={formData.hasEndTime ? 'Disable end time' : 'Enable end time'}
                 disabled={isBusy}
                 onPress={() => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    hasEndTime: !prev.hasEndTime,
-                    endDate: prev.startDate,
-                  }));
+                  setFormData((prev) => {
+                    const nextHasEndTime = !prev.hasEndTime;
+                    if (nextHasEndTime) {
+                      const aligned = alignEndDateTime(
+                        prev.startDate,
+                        prev.startTime,
+                        prev.endDate,
+                        prev.endTime
+                      );
+                      return {
+                        ...prev,
+                        hasEndTime: true,
+                        endDate: aligned.endDate,
+                        endTime: aligned.endTime,
+                      };
+                    }
+                    return {
+                      ...prev,
+                      hasEndTime: false,
+                    };
+                  });
                   setFormError(null);
                 }}
                 style={[

@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import {
   getInitialEventFormData,
   validateAndMapEventForm,
+  alignEndDateTime,
   type EventFormData,
 } from '../../src/features/calendar/utils/eventForm.ts';
 import type { CalendarEvent } from '../../src/types/calendar.ts';
@@ -200,4 +201,42 @@ test('Event Form: validateAndMapEventForm sanitizes optional fields and preserve
   assert.strictEqual(result.sanitized.reminderMinutesBefore, 0);
   assert.strictEqual(result.sanitized.status, 'completed');
 });
+
+test('Event Form: alignEndDateTime auto-aligns, rolls over midnight, and preserves valid end times', () => {
+  // 1. Afternoon start time where existing end time is earlier (e.g. default was 10:00, start changed to 15:00)
+  const afternoon = alignEndDateTime('2026-10-15', '15:00', '2026-10-15', '10:00');
+  assert.strictEqual(afternoon.endDate, '2026-10-15');
+  assert.strictEqual(afternoon.endTime, '16:00');
+
+  // 2. Midnight rollover (start 23:30 + 1 hour -> next day 00:30)
+  const midnight = alignEndDateTime('2026-10-15', '23:30', '2026-10-15', '10:00');
+  assert.strictEqual(midnight.endDate, '2026-10-16');
+  assert.strictEqual(midnight.endTime, '00:30');
+
+  // 3. Month & Year rollover (Dec 31 at 23:15 + 1 hour -> Jan 1 next year at 00:15)
+  const yearRollover = alignEndDateTime('2026-12-31', '23:15');
+  assert.strictEqual(yearRollover.endDate, '2027-01-01');
+  assert.strictEqual(yearRollover.endTime, '00:15');
+
+  // 4. Leap year rollover (Feb 29 at 23:45 + 1 hour -> Mar 1 at 00:45)
+  const leapRollover = alignEndDateTime('2024-02-29', '23:45');
+  assert.strictEqual(leapRollover.endDate, '2024-03-01');
+  assert.strictEqual(leapRollover.endTime, '00:45');
+
+  // 5. Preserves existing valid end date and time that is >= start date and time
+  const preserved = alignEndDateTime('2026-10-15', '09:00', '2026-10-15', '12:00');
+  assert.strictEqual(preserved.endDate, '2026-10-15');
+  assert.strictEqual(preserved.endTime, '12:00');
+
+  // 6. Custom duration preset (e.g. +30 minutes)
+  const custom30 = alignEndDateTime('2026-10-15', '10:00', undefined, undefined, 30);
+  assert.strictEqual(custom30.endDate, '2026-10-15');
+  assert.strictEqual(custom30.endTime, '10:30');
+
+  // 7. Custom duration preset across midnight (+120 minutes from 22:30)
+  const custom120 = alignEndDateTime('2026-10-15', '22:30', undefined, undefined, 120);
+  assert.strictEqual(custom120.endDate, '2026-10-16');
+  assert.strictEqual(custom120.endTime, '00:30');
+});
+
 

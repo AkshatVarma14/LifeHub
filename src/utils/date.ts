@@ -330,6 +330,31 @@ export function getUtcMonthRange(monthStr: string): { startInclusiveUtc: string;
   return { startInclusiveUtc, endExclusiveUtc };
 }
 
+/**
+ * Returns deterministic half-open UTC bounds [startInclusiveUtc, endExclusiveUtc) for a local calendar month.
+ * Starts at Day 1 00:00:00.000 local wall-clock time and ends at Day 1 00:00:00.000 local wall-clock time of the next month.
+ * Converts both local wall-clock boundaries to canonical UTC ISO strings.
+ * Month must be in valid YYYY-MM format.
+ */
+export function getLocalMonthUtcRange(monthStr: string): { startInclusiveUtc: string; endExclusiveUtc: string } {
+  if (!isValidMonthString(monthStr)) {
+    throw new Error(`Invalid month string '${monthStr}'. Expected YYYY-MM.`);
+  }
+
+  const trimmed = monthStr.trim();
+  const [year, month] = trimmed.split('-').map(Number);
+  const localStart = new Date(year, month - 1, 1, 0, 0, 0, 0);
+
+  const nextMonthStr = getNextMonthString(trimmed);
+  const [nextYear, nextMonth] = nextMonthStr.split('-').map(Number);
+  const localEnd = new Date(nextYear, nextMonth - 1, 1, 0, 0, 0, 0);
+
+  return {
+    startInclusiveUtc: localStart.toISOString(),
+    endExclusiveUtc: localEnd.toISOString(),
+  };
+}
+
 const WEEKDAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**

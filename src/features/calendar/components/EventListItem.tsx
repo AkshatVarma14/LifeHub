@@ -11,6 +11,7 @@ import { formatTimeDisplay } from '../../../utils/date.ts';
 export interface EventListItemProps {
   event: CalendarEvent;
   onUpdateStatus: (id: string, status: EventStatus) => Promise<unknown>;
+  onEdit?: (event: CalendarEvent) => void;
   onDelete?: (id: string) => Promise<unknown>;
   isMutating?: boolean;
 }
@@ -27,6 +28,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
 export function EventListItem({
   event,
   onUpdateStatus,
+  onEdit,
   onDelete,
   isMutating = false,
 }: EventListItemProps) {
@@ -205,21 +207,39 @@ export function EventListItem({
           </Pressable>
         </View>
 
-        {onDelete && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Delete event ${event.title}`}
-            disabled={isMutating}
-            onPress={handleDelete}
-            style={({ pressed }) => [
-              styles.deleteButton,
-              pressed && styles.buttonPressed,
-              isMutating && styles.buttonDisabled,
-            ]}
-          >
-            <Text style={styles.deleteButtonText}>Delete</Text>
-          </Pressable>
-        )}
+        <View style={styles.rightActionButtons}>
+          {onEdit && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Edit event ${event.title}`}
+              disabled={isMutating}
+              onPress={() => onEdit(event)}
+              style={({ pressed }) => [
+                styles.editButton,
+                pressed && styles.buttonPressed,
+                isMutating && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.editButtonText}>Edit</Text>
+            </Pressable>
+          )}
+
+          {onDelete && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Delete event ${event.title}`}
+              disabled={isMutating}
+              onPress={handleDelete}
+              style={({ pressed }) => [
+                styles.deleteButton,
+                pressed && styles.buttonPressed,
+                isMutating && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -373,6 +393,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#e11d48',
+  },
+  rightActionButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  editButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  editButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   buttonPressed: {
     opacity: 0.6,

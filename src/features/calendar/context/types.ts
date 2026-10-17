@@ -5,6 +5,7 @@
 
 import type React from 'react';
 import type { CalendarEvent, EventStatus } from '../../../types/calendar.ts';
+import type { EventInput } from '../validation.ts';
 import type { EventRepository } from '../repositories/types.ts';
 
 export interface CalendarState {
@@ -22,6 +23,8 @@ export interface CalendarContextValue extends CalendarState {
   setSelectedMonth: (month: string) => void;
   loadMonth: (month: string) => Promise<void>;
   selectMonth: (month: string) => Promise<void>;
+  createEvent: (input: EventInput) => Promise<CalendarEvent>;
+  updateEvent: (id: string, input: EventInput) => Promise<CalendarEvent>;
   updateEventStatus: (id: string, status: EventStatus) => Promise<CalendarEvent>;
   deleteEvent: (id: string) => Promise<void>;
   refresh: () => Promise<void>;

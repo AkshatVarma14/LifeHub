@@ -370,3 +370,113 @@ test('Calendar Store: refresh reloads current month', async () => {
   assert.strictEqual(store.getState().events.length, 1);
   assert.strictEqual(store.getState().events[0].title, 'Directly Inserted');
 });
+
+test('Calendar Store: createEvent persists event in SQLite and refreshes state', async () => {
+  const { executor } = createTestDatabase();
+  const repo = new SqliteEventRepository(executor);
+  const store = new CalendarStore('2026-10', repo);
+  await store.loadMonth('2026-10');
+  assert.strictEqual(store.getState().events.length, 0);
+
+  const created = await store.createEvent({
+    title: 'Algebra Lecture',
+    startTime: '2026-10-14T09:00:00.000Z',
+    category: 'Academic',
+    location: 'Hall B',
+  });
+
+  assert.strictEqual(created.title, 'Algebra Lecture');
+  assert.strictEqual(store.getState().events.length, 1);
+  assert.strictEqual(store.getState().events[0].id, created.id);
+  assert.strictEqual(store.getState().isMutating, false);
+
+  // Verify in SQLite directly
+  const inDb = await repo.getById(created.id);
+  assert.ok(inDb !== null);
+  assert.strictEqual(inDb.title, 'Algebra Lecture');
+});
+
+test('Calendar Store: createEvent in a different month navigates to that month', async () => {
+  const { executor } = createTestDatabase();
+  const repo = new SqliteEventRepository(executor);
+  const store = new CalendarStore('2026-10', repo);
+  await store.loadMonth('2026-10');
+  assert.strictEqual(store.getState().selectedMonth, '2026-10');
+
+  // Create an event for November 2026
+  const created = await store.createEvent({
+    title: 'November Conference',
+    startTime: '2026-11-05T10:00:00.000Z',
+    category: 'Work',
+  });
+
+  assert.strictEqual(created.title, 'November Conference');
+  // Store must have automatically navigated to November!
+  assert.strictEqual(store.getState().selectedMonth, '2026-11');
+  assert.strictEqual(store.getState().events.length, 1);
+  assert.strictEqual(store.getState().events[0].title, 'November Conference');
+});
+
+test('Calendar Store: createEvent write failure propagates error and resets isMutating', async () => {
+  const { executor } = createTestDatabase();
+  const repo = new SqliteEventRepository(executor);
+  const store = new CalendarStore('2026-10', repo);
+  await store.loadMonth('2026-10');
+
+  await assert.rejects(
+    async () => {
+      // Invalid event: empty title
+      await store.createEvent({
+        title: '',
+        startTime: '2026-10-10T10:00:00.000Z',
+        category: 'Work',
+      });
+    },
+    /validation failed/i
+  );
+
+  assert.strictEqual(store.getState().isMutating, false);
+  assert.ok(store.getState().error !== null);
+  assert.strictEqual(store.getState().events.length, 0);
+});
+
+test('Calendar Store: updateEvent updates event in SQLite and refreshes state', async () => {
+  const { executor } = createTestDatabase();
+  const repo = new SqliteEventRepository(executor);
+  const store = new CalendarStore('2026-10', repo);
+  await store.loadMonth('2026-10');
+
+  const created = await store.createEvent({
+    title: 'Initial Event',
+    startTime: '2026-10-12T14:00:00.000Z',
+    category: 'Personal',
+  });
+
+  assert.strictEqual(store.getState().events[0].title, 'Initial Event');
+
+  const updated = await store.updateEvent(created.id, {
+    title: 'Updated Event Title',
+    startTime: '2026-10-12T15:00:00.000Z',
+    category: 'Personal',
+    notes: 'Updated notes',
+  });
+
+  assert.strictEqual(updated.title, 'Updated Event Title');
+  assert.strictEqual(store.getState().events[0].title, 'Updated Event Title');
+  assert.strictEqual(store.getState().events[0].notes, 'Updated notes');
+  assert.strictEqual(store.getState().isMutating, false);
+
+  // Updating nonexistent event rejects
+  await assert.rejects(
+    async () => {
+      await store.updateEvent('nonexistent-id', {
+        title: 'Title',
+        startTime: '2026-10-12T15:00:00.000Z',
+        category: 'Personal',
+      });
+    },
+    /not found/i
+  );
+  assert.strictEqual(store.getState().isMutating, false);
+});
+

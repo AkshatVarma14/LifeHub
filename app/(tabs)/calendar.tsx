@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,10 +7,12 @@ import {
   RefreshControl,
   Pressable,
 } from 'react-native';
+import type { CalendarEvent } from '@/src/types/calendar';
 import { useCalendar } from '@/src/features/calendar/context';
 import {
   MonthSelector,
   EventList,
+  EventFormModal,
 } from '@/src/features/calendar/components';
 
 export default function CalendarScreen() {
@@ -25,6 +27,24 @@ export default function CalendarScreen() {
     deleteEvent,
     refresh,
   } = useCalendar();
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+
+  const handleOpenAdd = useCallback(() => {
+    setEditingEvent(null);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((event: CalendarEvent) => {
+    setEditingEvent(event);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingEvent(null);
+  }, []);
 
   const handleRefresh = useCallback(() => {
     refresh().catch(() => {
@@ -76,6 +96,16 @@ export default function CalendarScreen() {
         isMutating={isMutating}
         onUpdateStatus={updateEventStatus}
         onDelete={deleteEvent}
+        onEdit={handleOpenEdit}
+        onAddEvent={handleOpenAdd}
+      />
+
+      {/* 4. Event Form Modal (Create / Edit) */}
+      <EventFormModal
+        visible={isModalOpen}
+        onClose={handleCloseModal}
+        editingEvent={editingEvent}
+        selectedMonth={selectedMonth}
       />
     </ScrollView>
   );

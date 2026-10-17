@@ -54,6 +54,8 @@ export function CalendarProvider({
       },
       loadMonth: (month: string) => store.loadMonth(month),
       selectMonth: (month: string) => store.selectMonth(month),
+      createEvent: (input) => store.createEvent(input),
+      updateEvent: (id, input) => store.updateEvent(id, input),
       updateEventStatus: (id, status) => store.updateEventStatus(id, status),
       deleteEvent: (id) => store.deleteEvent(id),
       refresh: () => store.refresh(),

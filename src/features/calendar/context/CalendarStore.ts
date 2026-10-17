@@ -11,9 +11,15 @@
  */
 
 import type { CalendarEvent, EventStatus } from '../../../types/calendar.ts';
+import type { EventInput } from '../validation.ts';
 import type { EventRepository } from '../repositories/types.ts';
 import type { CalendarStoreState, StoreListener } from './types.ts';
-import { getCurrentMonthString, isValidMonthString } from '../../../utils/date.ts';
+import {
+  getCurrentMonthString,
+  isValidMonthString,
+  extractMonthFromDate,
+  formatLocalDateKey,
+} from '../../../utils/date.ts';
 
 const VALID_STATUSES: readonly EventStatus[] = ['pending', 'completed', 'cancelled'];
 
@@ -114,6 +120,94 @@ export class CalendarStore {
 
   async refresh(): Promise<void> {
     await this.loadMonth(this.state.selectedMonth);
+  }
+
+  async createEvent(input: EventInput): Promise<CalendarEvent> {
+    if (this.state.isMutating) {
+      throw new Error('A calendar mutation is already in progress. Please wait.');
+    }
+
+    this.state = { ...this.state, isMutating: true };
+    this.notify();
+
+    let created: CalendarEvent;
+    try {
+      created = await this.eventRepo.create(input);
+    } catch (writeErr) {
+      const err = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
+      this.state = { ...this.state, isMutating: false, error: err };
+      this.notify();
+      throw err;
+    }
+
+    // Determine target month to navigate to if event created in another month
+    let targetMonth = this.state.selectedMonth;
+    try {
+      const localDateKey = formatLocalDateKey(created.startTime);
+      const eventMonth = extractMonthFromDate(localDateKey);
+      if (isValidMonthString(eventMonth)) {
+        targetMonth = eventMonth;
+      }
+    } catch {
+      // Fallback to currently selected month
+    }
+
+    try {
+      await this.loadMonth(targetMonth);
+    } catch (refreshErr) {
+      console.warn('Post-event-create refresh failed:', refreshErr);
+    } finally {
+      this.state = { ...this.state, isMutating: false };
+      this.notify();
+    }
+
+    return created;
+  }
+
+  async updateEvent(id: string, input: EventInput): Promise<CalendarEvent> {
+    if (this.state.isMutating) {
+      throw new Error('A calendar mutation is already in progress. Please wait.');
+    }
+
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      throw new Error('Event ID must be a non-empty string');
+    }
+
+    this.state = { ...this.state, isMutating: true };
+    this.notify();
+
+    let updated: CalendarEvent;
+    try {
+      updated = await this.eventRepo.update(id.trim(), input);
+    } catch (writeErr) {
+      const err = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
+      this.state = { ...this.state, isMutating: false, error: err };
+      this.notify();
+      throw err;
+    }
+
+    // Determine target month to refresh/navigate to
+    let targetMonth = this.state.selectedMonth;
+    try {
+      const localDateKey = formatLocalDateKey(updated.startTime);
+      const eventMonth = extractMonthFromDate(localDateKey);
+      if (isValidMonthString(eventMonth)) {
+        targetMonth = eventMonth;
+      }
+    } catch {
+      // Fallback to currently selected month
+    }
+
+    try {
+      await this.loadMonth(targetMonth);
+    } catch (refreshErr) {
+      console.warn('Post-event-update refresh failed:', refreshErr);
+    } finally {
+      this.state = { ...this.state, isMutating: false };
+      this.notify();
+    }
+
+    return updated;
   }
 
   async updateEventStatus(id: string, status: EventStatus): Promise<CalendarEvent> {

@@ -4,6 +4,7 @@ import {
   View,
   Text,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import type { CalendarEvent, EventStatus } from '../../../types/calendar.ts';
 import {
@@ -19,7 +20,9 @@ export interface EventListProps {
   isLoading: boolean;
   isMutating?: boolean;
   onUpdateStatus: (id: string, status: EventStatus) => Promise<unknown>;
+  onEdit?: (event: CalendarEvent) => void;
   onDelete?: (id: string) => Promise<unknown>;
+  onAddEvent?: () => void;
 }
 
 export function EventList({
@@ -28,7 +31,9 @@ export function EventList({
   isLoading,
   isMutating = false,
   onUpdateStatus,
+  onEdit,
   onDelete,
+  onAddEvent,
 }: EventListProps) {
   let formattedMonth = selectedMonth;
   try {
@@ -56,6 +61,21 @@ export function EventList({
         <Text style={styles.emptySubtitle}>
           There are no events scheduled for this month.
         </Text>
+        {onAddEvent && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add an event for this month"
+            disabled={isMutating}
+            onPress={onAddEvent}
+            style={({ pressed }) => [
+              styles.emptyAddButton,
+              pressed && styles.buttonPressed,
+              isMutating && styles.buttonDisabled,
+            ]}
+          >
+            <Text style={styles.emptyAddButtonText}>+ Add Event</Text>
+          </Pressable>
+        )}
       </View>
     );
   }
@@ -77,6 +97,28 @@ export function EventList({
 
   return (
     <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.sectionTitle}>Events</Text>
+          <Text style={styles.countBadge}>{events.length}</Text>
+        </View>
+        {onAddEvent && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add event"
+            disabled={isMutating}
+            style={({ pressed }) => [
+              styles.addButton,
+              pressed && styles.buttonPressed,
+              isMutating && styles.buttonDisabled,
+            ]}
+            onPress={onAddEvent}
+          >
+            <Text style={styles.addButtonText}>+ Add Event</Text>
+          </Pressable>
+        )}
+      </View>
+
       {sortedDates.map((dateKey) => {
         const dayEvents = groupedEvents.get(dateKey) ?? [];
         // Sort events within each day by start time
@@ -100,6 +142,7 @@ export function EventList({
                 key={event.id}
                 event={event}
                 onUpdateStatus={onUpdateStatus}
+                onEdit={onEdit}
                 onDelete={onDelete}
                 isMutating={isMutating}
               />
@@ -114,6 +157,43 @@ export function EventList({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  countBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   dateGroup: {
     marginBottom: 16,
@@ -172,5 +252,23 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 4,
     textAlign: 'center',
+  },
+  emptyAddButton: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+  },
+  emptyAddButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  buttonPressed: {
+    opacity: 0.7,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

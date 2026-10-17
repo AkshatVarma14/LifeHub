@@ -14,6 +14,9 @@ import {
   formatDateDisplay,
   normalizeToUtcIso,
   getUtcMonthRange,
+  formatTimeDisplay,
+  formatLocalDateKey,
+  formatEventDateHeader,
 } from '../../src/utils/date.ts';
 
 
@@ -238,5 +241,26 @@ test('Date Utilities: getUtcMonthRange deterministic half-open UTC bounds', () =
   assert.throws(() => getUtcMonthRange('2026-13'), /Invalid month string/i);
   assert.throws(() => getUtcMonthRange(''), /Invalid month string/i);
 });
+
+test('Date Utilities: formatTimeDisplay, formatLocalDateKey, and formatEventDateHeader', () => {
+  // formatTimeDisplay
+  assert.strictEqual(formatTimeDisplay(''), '');
+  assert.strictEqual(formatTimeDisplay('invalid'), '');
+  const testIso = '2026-10-15T09:30:00.000Z';
+  const timeFormatted = formatTimeDisplay(testIso);
+  assert.match(timeFormatted, /^\d{1,2}:\d{2}\s+(AM|PM)$/);
+
+  // formatLocalDateKey
+  assert.strictEqual(formatLocalDateKey(''), '');
+  assert.strictEqual(formatLocalDateKey('invalid'), '');
+  const localKey = formatLocalDateKey(testIso);
+  assert.match(localKey, /^\d{4}-\d{2}-\d{2}$/);
+
+  // formatEventDateHeader
+  assert.strictEqual(formatEventDateHeader(''), '');
+  assert.strictEqual(formatEventDateHeader('2026-10-15'), 'Thu, 15 Oct 2026');
+  assert.strictEqual(formatEventDateHeader('2026-01-01'), 'Thu, 1 Jan 2026');
+});
+
 
 

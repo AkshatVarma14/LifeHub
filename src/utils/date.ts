@@ -330,4 +330,67 @@ export function getUtcMonthRange(monthStr: string): { startInclusiveUtc: string;
   return { startInclusiveUtc, endExclusiveUtc };
 }
 
+const WEEKDAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * Formats an ISO date-time string to a readable local 12-hour time (e.g. '9:30 AM', '12:00 PM').
+ * Returns empty string for invalid or empty inputs.
+ */
+export function formatTimeDisplay(isoDateTimeStr: string): string {
+  if (typeof isoDateTimeStr !== 'string' || isoDateTimeStr.trim().length === 0) {
+    return '';
+  }
+  const d = new Date(isoDateTimeStr.trim());
+  if (isNaN(d.getTime())) {
+    return '';
+  }
+  const hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${minutes} ${ampm}`;
+}
+
+/**
+ * Extracts the local YYYY-MM-DD date key from an ISO date-time string for grouping events.
+ */
+export function formatLocalDateKey(isoDateTimeStr: string): string {
+  if (typeof isoDateTimeStr !== 'string' || isoDateTimeStr.trim().length === 0) {
+    return '';
+  }
+  const d = new Date(isoDateTimeStr.trim());
+  if (isNaN(d.getTime())) {
+    return '';
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Formats a local date key (YYYY-MM-DD) or ISO string into a human-readable header (e.g. 'Thu, 15 Oct 2026').
+ */
+export function formatEventDateHeader(dateStrOrIso: string): string {
+  if (typeof dateStrOrIso !== 'string' || dateStrOrIso.trim().length === 0) {
+    return '';
+  }
+  const trimmed = dateStrOrIso.trim();
+  let d: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [y, m, day] = trimmed.split('-').map(Number);
+    d = new Date(y, m - 1, day);
+  } else {
+    d = new Date(trimmed);
+  }
+  if (isNaN(d.getTime())) {
+    return trimmed;
+  }
+  const weekday = WEEKDAY_NAMES_SHORT[d.getDay()] ?? '';
+  const day = d.getDate();
+  const monthShort = MONTH_NAMES_SHORT[d.getMonth()] ?? '';
+  const year = d.getFullYear();
+  return `${weekday}, ${day} ${monthShort} ${year}`;
+}
+
 

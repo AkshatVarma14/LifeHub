@@ -20,6 +20,7 @@ import {
   HabitsSnapshotCard,
   ScheduleSnapshotCard,
 } from '@/src/features/dashboard';
+import { DemoDataCard } from '@/src/features/demo';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -28,22 +29,25 @@ export default function DashboardScreen() {
   const greeting = getDashboardGreeting();
 
   // 1. Finance store state & actions
+  const financeContext = useFinance();
   const {
     summary: financeSummary,
     isLoading: isFinanceLoading,
     error: financeError,
     refresh: refreshFinance,
-  } = useFinance();
+  } = financeContext;
 
   // 2. Calendar store state & actions
+  const calendarContext = useCalendar();
   const {
     events: calendarEvents,
     isLoading: isCalendarLoading,
     error: calendarError,
     refresh: refreshCalendar,
-  } = useCalendar();
+  } = calendarContext;
 
   // 3. Habits store state & actions
+  const habitsContext = useHabits();
   const {
     habits,
     isHabitCompletedOnDate,
@@ -51,7 +55,7 @@ export default function DashboardScreen() {
     isLoading: isHabitsLoading,
     error: habitsError,
     refresh: refreshHabits,
-  } = useHabits();
+  } = habitsContext;
 
   const isInitialLoading =
     isFinanceLoading &&
@@ -154,6 +158,16 @@ export default function DashboardScreen() {
         <FinanceSnapshotCard
           summary={financeSummary}
           onNavigateToFinance={handleNavigateToFinance}
+        />
+
+        {/* 4. Quick-Start Demo Data Action */}
+        <DemoDataCard
+          contexts={{
+            finance: financeContext,
+            calendar: calendarContext,
+            habits: habitsContext,
+          }}
+          todayDate={todayDate}
         />
       </ScrollView>
     </View>

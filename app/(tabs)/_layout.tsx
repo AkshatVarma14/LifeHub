@@ -85,13 +85,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="two"
         options={{
-          title: 'Overview',
+          title: 'Dashboard',
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
-                ios: 'list.bullet',
-                android: 'list',
-                web: 'list',
+                ios: 'square.grid.2x2',
+                android: 'dashboard',
+                web: 'dashboard',
               }}
               tintColor={color}
               size={28}

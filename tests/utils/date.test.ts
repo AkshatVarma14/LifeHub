@@ -10,6 +10,8 @@ import {
   getTodayDateString,
   getPreviousMonthString,
   getNextMonthString,
+  getPreviousDateString,
+  getNextDateString,
   formatMonthDisplay,
   formatDateDisplay,
   normalizeToUtcIso,
@@ -133,6 +135,33 @@ test('Date Utilities: getPreviousMonthString and getNextMonthString stepping and
   // Input validation
   assert.throws(() => getPreviousMonthString('invalid-month'), /Invalid month string/i);
   assert.throws(() => getNextMonthString('invalid-month'), /Invalid month string/i);
+});
+
+test('Date Utilities: getPreviousDateString and getNextDateString day stepping and rollover', () => {
+  // Standard day stepping
+  assert.strictEqual(getPreviousDateString('2026-10-15'), '2026-10-14');
+  assert.strictEqual(getNextDateString('2026-10-15'), '2026-10-16');
+
+  // Month boundary stepping
+  assert.strictEqual(getPreviousDateString('2026-10-01'), '2026-09-30');
+  assert.strictEqual(getNextDateString('2026-09-30'), '2026-10-01');
+
+  // Year boundary stepping
+  assert.strictEqual(getPreviousDateString('2026-01-01'), '2025-12-31');
+  assert.strictEqual(getNextDateString('2025-12-31'), '2026-01-01');
+
+  // Leap year rollover
+  assert.strictEqual(getPreviousDateString('2024-03-01'), '2024-02-29'); // Leap year
+  assert.strictEqual(getNextDateString('2024-02-28'), '2024-02-29');
+  assert.strictEqual(getNextDateString('2024-02-29'), '2024-03-01');
+
+  // Non-leap year rollover
+  assert.strictEqual(getPreviousDateString('2025-03-01'), '2025-02-28'); // Non-leap year
+  assert.strictEqual(getNextDateString('2025-02-28'), '2025-03-01');
+
+  // Input validation
+  assert.throws(() => getPreviousDateString('invalid-date'), /Invalid date string/i);
+  assert.throws(() => getNextDateString('invalid-date'), /Invalid date string/i);
 });
 
 test('Date Utilities: formatMonthDisplay and formatDateDisplay readable formats', () => {

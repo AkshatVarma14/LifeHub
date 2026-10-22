@@ -195,6 +195,38 @@ export function getNextMonthString(monthStr: string): string {
 }
 
 /**
+ * Returns the preceding calendar date as a YYYY-MM-DD string.
+ * Handles month boundaries, year boundaries, and leap year rollover using UTC date arithmetic.
+ */
+export function getPreviousDateString(dateStr: string): string {
+  if (!isValidDateString(dateStr)) {
+    throw new Error(`Invalid date string '${dateStr}'. Expected YYYY-MM-DD.`);
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const prevDate = new Date(Date.UTC(y, m - 1, d - 1));
+  const year = prevDate.getUTCFullYear();
+  const month = String(prevDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(prevDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Returns the subsequent calendar date as a YYYY-MM-DD string.
+ * Handles month boundaries, year boundaries, and leap year rollover using UTC date arithmetic.
+ */
+export function getNextDateString(dateStr: string): string {
+  if (!isValidDateString(dateStr)) {
+    throw new Error(`Invalid date string '${dateStr}'. Expected YYYY-MM-DD.`);
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const nextDate = new Date(Date.UTC(y, m - 1, d + 1));
+  const year = nextDate.getUTCFullYear();
+  const month = String(nextDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(nextDate.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Formats a YYYY-MM month string for human display (e.g. '2026-10' -> 'October 2026').
  */
 export function formatMonthDisplay(monthStr: string): string {

@@ -66,6 +66,23 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="habits"
+        options={{
+          title: 'Habits',
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: 'checkmark.circle',
+                android: 'check_circle',
+                web: 'check_circle',
+              }}
+              tintColor={color}
+              size={28}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="two"
         options={{
           title: 'Overview',

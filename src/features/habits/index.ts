@@ -4,3 +4,6 @@ export * from './timer.ts';
 export * from './streaks.ts';
 export * from './repositories/index.ts';
 export * from './context/index.ts';
+export * from './components/index.ts';
+export * from './utils/habitForm.ts';
+

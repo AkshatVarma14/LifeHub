@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import { FinanceProvider } from '@/src/features/finance/context';
 import { CalendarProvider } from '@/src/features/calendar/context';
+import { HabitsProvider } from '@/src/features/habits/context';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -51,10 +52,12 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <FinanceProvider>
         <CalendarProvider>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          </Stack>
+          <HabitsProvider>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            </Stack>
+          </HabitsProvider>
         </CalendarProvider>
       </FinanceProvider>
     </ThemeProvider>

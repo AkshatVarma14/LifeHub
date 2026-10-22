@@ -12,6 +12,8 @@ import {
   DateSelector,
   HabitList,
   HabitFormModal,
+  FocusTimerCard,
+  StartTimerModal,
 } from '@/src/features/habits/components';
 
 export default function HabitsScreen() {
@@ -33,6 +35,8 @@ export default function HabitsScreen() {
   } = useHabits();
 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isTimerModalOpen, setIsTimerModalOpen] = useState<boolean>(false);
+  const [timerInitialHabitId, setTimerInitialHabitId] = useState<string | null>(null);
 
   const handleOpenAdd = useCallback(() => {
     setIsModalOpen(true);
@@ -40,6 +44,16 @@ export default function HabitsScreen() {
 
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
+  }, []);
+
+  const handleOpenStartTimer = useCallback((habitId?: string | null) => {
+    setTimerInitialHabitId(habitId ?? null);
+    setIsTimerModalOpen(true);
+  }, []);
+
+  const handleCloseTimerModal = useCallback(() => {
+    setIsTimerModalOpen(false);
+    setTimerInitialHabitId(null);
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -64,7 +78,13 @@ export default function HabitsScreen() {
           isLoading={isLoading || isMutating}
         />
 
-        {/* 2. Error Banner */}
+        {/* 2. Focus Timer (Active session or start card) */}
+        <FocusTimerCard
+          habits={habits}
+          onOpenStartModal={() => handleOpenStartTimer(null)}
+        />
+
+        {/* 3. Error Banner */}
         {error && (
           <View style={styles.errorBanner} accessibilityRole="alert">
             <View style={styles.errorTextContainer}>
@@ -85,7 +105,7 @@ export default function HabitsScreen() {
           </View>
         )}
 
-        {/* 3. Habit List (Active + Archived) */}
+        {/* 4. Habit List (Active + Archived) */}
         <HabitList
           habits={habits}
           archivedHabits={archivedHabits}
@@ -99,10 +119,11 @@ export default function HabitsScreen() {
           onUnarchiveHabit={unarchiveHabit}
           onDeleteHabit={deleteHabit}
           onAddHabit={handleOpenAdd}
+          onStartTimer={handleOpenStartTimer}
         />
       </ScrollView>
 
-      {/* 4. Floating Action Button to Add Habit */}
+      {/* 5. Floating Action Button to Add Habit */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Add new habit"
@@ -117,10 +138,18 @@ export default function HabitsScreen() {
         <Text style={styles.fabText}>+ Add Habit</Text>
       </Pressable>
 
-      {/* 5. Habit Creation Modal */}
+      {/* 6. Habit Creation Modal */}
       <HabitFormModal
         visible={isModalOpen}
         onClose={handleCloseModal}
+      />
+
+      {/* 7. Focus Timer Setup Modal */}
+      <StartTimerModal
+        visible={isTimerModalOpen}
+        habits={habits}
+        initialHabitId={timerInitialHabitId}
+        onClose={handleCloseTimerModal}
       />
     </View>
   );

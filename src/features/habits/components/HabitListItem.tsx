@@ -16,6 +16,7 @@ export interface HabitListItemProps {
   onArchive?: (habitId: string) => Promise<unknown>;
   onUnarchive?: (habitId: string) => Promise<unknown>;
   onDelete?: (habitId: string) => Promise<unknown>;
+  onStartTimer?: (habitId: string) => void;
 }
 
 export function HabitListItem({
@@ -27,6 +28,7 @@ export function HabitListItem({
   onArchive,
   onUnarchive,
   onDelete,
+  onStartTimer,
 }: HabitListItemProps) {
   const isArchived = habit.isArchived;
 
@@ -118,21 +120,39 @@ export function HabitListItem({
       {/* Action buttons row */}
       <View style={styles.actionsRow}>
         {!isArchived ? (
-          onArchive && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Archive habit ${habit.name}`}
-              disabled={isMutating}
-              onPress={handleArchive}
-              style={({ pressed }) => [
-                styles.actionButton,
-                pressed && styles.buttonPressed,
-                isMutating && styles.buttonDisabled,
-              ]}
-            >
-              <Text style={styles.actionButtonText}>Archive</Text>
-            </Pressable>
-          )
+          <View style={styles.activeActions}>
+            {onStartTimer && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Start focus timer for ${habit.name}`}
+                disabled={isMutating}
+                onPress={() => onStartTimer(habit.id)}
+                style={({ pressed }) => [
+                  styles.timerButton,
+                  pressed && styles.buttonPressed,
+                  isMutating && styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.timerButtonText}>⏱️ Focus</Text>
+              </Pressable>
+            )}
+
+            {onArchive && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Archive habit ${habit.name}`}
+                disabled={isMutating}
+                onPress={handleArchive}
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  pressed && styles.buttonPressed,
+                  isMutating && styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.actionButtonText}>Archive</Text>
+              </Pressable>
+            )}
+          </View>
         ) : (
           <View style={styles.archivedActions}>
             {onUnarchive && (
@@ -272,6 +292,25 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#f1f5f9',
     paddingTop: 8,
+  },
+  activeActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  timerButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  timerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   actionButton: {
     paddingVertical: 6,

@@ -22,6 +22,7 @@ export interface HabitListProps {
   onUnarchiveHabit: (habitId: string) => Promise<unknown>;
   onDeleteHabit: (habitId: string) => Promise<unknown>;
   onAddHabit?: () => void;
+  onStartTimer?: (habitId: string) => void;
 }
 
 export function HabitList({
@@ -37,6 +38,7 @@ export function HabitList({
   onUnarchiveHabit,
   onDeleteHabit,
   onAddHabit,
+  onStartTimer,
 }: HabitListProps) {
   const [showArchived, setShowArchived] = useState<boolean>(false);
 
@@ -130,6 +132,7 @@ export function HabitList({
             isMutating={isMutating}
             onToggleCompletion={onToggleCompletion}
             onArchive={onArchiveHabit}
+            onStartTimer={onStartTimer}
           />
         );
       })}
